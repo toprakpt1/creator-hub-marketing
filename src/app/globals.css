@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * Light product surface: warm off-white canvas, cool light-blue cards.
+   * Every colour is a token so a dark palette can be reintroduced later by
+   * redefining this block under a `.dark` selector — nothing downstream
+   * hardcodes a colour value.
+   */
+  :root {
+    /* Warm beige canvas */
+    --background: 40 36% 97%;
+    --foreground: 215 30% 17%;
+
+    /* Cards sit slightly cool against the warm canvas */
+    --card: 200 60% 98%;
+    --card-foreground: 215 30% 17%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 30% 17%;
+
+    /* Light blue action colour */
+    --primary: 205 84% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 205 46% 93%;
+    --secondary-foreground: 215 28% 26%;
+
+    --muted: 205 40% 94%;
+    --muted-foreground: 215 16% 44%;
+
+    --accent: 205 55% 91%;
+    --accent-foreground: 215 30% 20%;
+
+    --destructive: 0 74% 40%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 26%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 30 92% 30%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 205 28% 87%;
+    --input: 205 28% 80%;
+    --ring: 205 84% 45%;
+
+    /* Sidebar is the warm side of the palette, a shade deeper than canvas */
+    --sidebar: 40 30% 94%;
+    --sidebar-foreground: 215 16% 40%;
+    --sidebar-border: 205 24% 86%;
+    --sidebar-accent: 205 52% 90%;
+
+    --radius: 0.6rem;
+
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /* Slim, unobtrusive scrollbars — this app is table-heavy */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(205 25% 78%);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(205 25% 66%);
+    background-clip: content-box;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}

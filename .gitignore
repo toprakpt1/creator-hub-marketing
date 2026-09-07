@@ -1,0 +1,19 @@
+node_modules
+.next
+out
+build
+.DS_Store
+*.pem
+npm-debug.log*
+.env*.local
+next-env.d.ts
+.vercel
+*.tsbuildinfo
+# TestSprite artefacts describe an earlier, mock-data phase of this project
+testsprite_tests/
+TESTSPRITE_PRD.md
+
+# local sqlite database
+/data
+*.db
+*.db-journal
