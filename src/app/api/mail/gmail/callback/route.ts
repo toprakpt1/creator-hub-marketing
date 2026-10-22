@@ -47,10 +47,18 @@ export async function GET(request: NextRequest) {
     return back(request, { gmail: "error", reason: "state_mismatch" });
   }
 
+  let email: string;
+  let tokens: Awaited<ReturnType<typeof exchangeCode>>["tokens"];
   try {
     const redirectUri = resolveRedirectUri(request.url);
-    const { email, tokens } = await exchangeCode(code, redirectUri);
+    ({ email, tokens } = await exchangeCode(code, redirectUri));
+  } catch (e) {
+    const reason = e instanceof GmailError ? e.code : "exchange_failed";
+    console.error("[gmail] token exchange failed:", e);
+    return back(request, { gmail: "error", reason });
+  }
 
+  try {
     saveMailAccount({
       email,
       refreshToken: tokens.refresh_token as string,
@@ -58,11 +66,10 @@ export async function GET(request: NextRequest) {
       accessTokenExpiresAt: Date.now() + tokens.expires_in * 1000,
       scope: tokens.scope ?? null,
     });
-
-    return back(request, { gmail: "connected" });
   } catch (e) {
-    const reason = e instanceof GmailError ? e.code : "exchange_failed";
-    console.error("[gmail] connect failed:", e);
-    return back(request, { gmail: "error", reason });
+    console.error("[gmail] could not save the connected account:", e);
+    return back(request, { gmail: "error", reason: "save_failed" });
   }
+
+  return back(request, { gmail: "connected" });
 }

@@ -71,7 +71,18 @@ export function SettingsWorkspace({
     if (result === "connected") {
       toast.success(t("settings.mailCallbackConnected"));
     } else {
-      toast.error(t("settings.mailCallbackError", { reason: params.get("reason") ?? "unknown" }));
+      const reason = params.get("reason") ?? "unknown";
+      const key =
+        reason === "access_denied"
+          ? "settings.mailErrorAccessDenied"
+          : reason === "state_mismatch"
+            ? "settings.mailErrorState"
+            : reason === "not_configured"
+              ? "settings.mailErrorNotConfigured"
+              : reason === "save_failed"
+                ? "settings.mailErrorSave"
+                : "settings.mailCallbackError";
+      toast.error(t(key, { reason }));
     }
 
     params.delete("gmail");

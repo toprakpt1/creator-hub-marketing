@@ -75,6 +75,7 @@ export function saveMailAccount(input: {
   accessTokenExpiresAt: number;
   scope: string | null;
 }): void {
+  const now = nowIso();
   getDb()
     .prepare(
       `INSERT INTO mail_account
@@ -98,7 +99,8 @@ export function saveMailAccount(input: {
       encryptSecret(input.accessToken),
       input.accessTokenExpiresAt,
       input.scope,
-      nowIso()
+      now,
+      now
     );
 }
 

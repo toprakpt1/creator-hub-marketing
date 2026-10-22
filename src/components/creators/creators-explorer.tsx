@@ -14,6 +14,7 @@ import {
   Megaphone,
   ThumbsDown,
   ThumbsUp,
+  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -63,7 +64,15 @@ import { useT } from "@/lib/i18n/provider";
 import type { Creator } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export function CreatorsExplorer({ creators }: { creators: Creator[] }) {
+export function CreatorsExplorer({
+  creators,
+  addedNonce = 0,
+  onAddManual,
+}: {
+  creators: Creator[];
+  addedNonce?: number;
+  onAddManual?: () => void;
+}) {
   const t = useT();
   const router = useRouter();
 
@@ -77,6 +86,14 @@ export function CreatorsExplorer({ creators }: { creators: Creator[] }) {
   const [rejectOpen, setRejectOpen] = React.useState(false);
   const [listOpen, setListOpen] = React.useState(false);
   const [campaignOpen, setCampaignOpen] = React.useState(false);
+
+  // A newly added creator has no score yet, so show the newest records first.
+  React.useEffect(() => {
+    if (addedNonce > 0) {
+      setSort("discovered_desc");
+      setPage(1);
+    }
+  }, [addedNonce]);
 
   const set = <K extends keyof CreatorFilters>(key: K, value: CreatorFilters[K]) => {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -167,7 +184,18 @@ export function CreatorsExplorer({ creators }: { creators: Creator[] }) {
 
   /** Analyses each selected creator; 2 quota units apiece, so it is explicit. */
   const bulkAnalyze = async () => {
-    const ids = [...selected];
+    const ids = creators
+      .filter((c) => selected.has(c.id) && c.uploadsPlaylistId)
+      .map((c) => c.id);
+    const skipped = selected.size - ids.length;
+
+    if (ids.length === 0) {
+      toast.error(t("creators.analyzeUnavailable"), {
+        description: t("creators.analyzeUnavailableBody"),
+      });
+      return;
+    }
+
     setBusy(true);
     const toastId = toast.loading(t("creators.analyzingCount", { count: ids.length }));
     let ok = 0;
@@ -184,6 +212,9 @@ export function CreatorsExplorer({ creators }: { creators: Creator[] }) {
       id: toastId,
       description: t("creators.bulkAnalyzeCost", { units: ids.length * 2 }),
     });
+    if (skipped > 0) {
+      toast.info(t("creators.bulkAnalyzeSkipped", { count: skipped }));
+    }
     setSelected(new Set());
     setBusy(false);
     refresh();
@@ -196,12 +227,20 @@ export function CreatorsExplorer({ creators }: { creators: Creator[] }) {
         title={t("creators.emptyDbTitle")}
         description={t("creators.emptyDbBody")}
         action={
-          <Button size="sm" asChild>
-            <Link href="/discover">
-              <Radar />
-              {t("creators.goDiscover")}
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button size="sm" asChild>
+              <Link href="/discover">
+                <Radar />
+                {t("creators.goDiscover")}
+              </Link>
+            </Button>
+            {onAddManual && (
+              <Button size="sm" variant="outline" onClick={onAddManual}>
+                <UserPlus />
+                {t("creators.addManual")}
+              </Button>
+            )}
+          </div>
         }
       />
     );

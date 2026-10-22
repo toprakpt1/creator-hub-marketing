@@ -164,6 +164,14 @@ export function getCreatorByChannelId(channelId: string): Creator | null {
   return row ? mapCreator(row) : null;
 }
 
+/** Manual additions without a channel id are deduplicated by handle instead. */
+export function getCreatorByHandle(handle: string): Creator | null {
+  const row = getDb()
+    .prepare(`${SELECT_CREATOR} WHERE c.handle = ? COLLATE NOCASE`)
+    .get(handle) as CreatorRow | undefined;
+  return row ? mapCreator(row) : null;
+}
+
 export function listVideos(creatorId: string): CreatorVideo[] {
   interface VideoRow {
     video_id: string; creator_id: string; title: string; published_at: string;
@@ -261,6 +269,100 @@ export function saveCandidates(candidates: DiscoveryCandidate[]): {
   run();
 
   return { added, skipped, ids };
+}
+
+/** Fields resolved by the API route before a manual creator is written. */
+export interface ManualCreatorRecord {
+  channelId: string | null;
+  handle: string | null;
+  name: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  country: string | null;
+  subscriberCount: number | null;
+  subscriberCountHidden: boolean;
+  channelTotalViews: number | null;
+  channelVideoCount: number | null;
+  uploadsPlaylistId: string | null;
+  channelPublishedAt: string | null;
+  email: string | null;
+  keywords: string[];
+}
+
+const INSERT_MANUAL_CREATOR = `
+  INSERT INTO creators (
+    id, platform, youtube_channel_id, name, handle, description, thumbnail_url, country,
+    subscriber_count, subscriber_count_hidden, channel_total_views, channel_video_count,
+    uploads_playlist_id, channel_published_at, status, email, email_source, email_status,
+    discovered_at, last_synced_at, created_at, updated_at
+  ) VALUES (
+    @id, 'youtube', @channelId, @name, @handle, @description, @thumbnailUrl, @country,
+    @subscriberCount, @subscriberHidden, @totalViews, @videoCount,
+    @uploadsPlaylistId, @channelPublishedAt, 'new', @email, @emailSource, @emailStatus,
+    @now, @syncedAt, @now, @now
+  )
+`;
+
+/**
+ * Adds a creator the user entered by hand.
+ *
+ * The UNIQUE channel id is the hard guard for YouTube records; entries without
+ * one are deduplicated by handle instead. Returns the existing row rather than
+ * throwing when the creator is already known.
+ */
+export function createManualCreator(input: ManualCreatorRecord): {
+  creator: Creator;
+  created: boolean;
+} {
+  const existing =
+    (input.channelId ? getCreatorByChannelId(input.channelId) : null) ??
+    (input.handle ? getCreatorByHandle(input.handle) : null);
+  if (existing) return { creator: existing, created: false };
+
+  const db = getDb();
+  const id = randomUUID();
+  const now = nowIso();
+
+  try {
+    db.transaction(() => {
+      db.prepare(INSERT_MANUAL_CREATOR).run({
+        id,
+        channelId: input.channelId,
+        name: input.name,
+        handle: input.handle,
+        description: input.description,
+        thumbnailUrl: input.thumbnailUrl,
+        country: input.country,
+        subscriberCount: input.subscriberCount,
+        subscriberHidden: input.subscriberCountHidden ? 1 : 0,
+        totalViews: input.channelTotalViews,
+        videoCount: input.channelVideoCount,
+        uploadsPlaylistId: input.uploadsPlaylistId,
+        channelPublishedAt: input.channelPublishedAt,
+        email: input.email,
+        emailSource: input.email ? "manual" : "none",
+        emailStatus: input.email ? "manual" : "not_checked",
+        now,
+        syncedAt: input.uploadsPlaylistId ? now : null,
+      });
+
+      const linkKeyword = db.prepare(
+        `INSERT OR IGNORE INTO creator_keywords (creator_id, keyword, first_seen) VALUES (?, ?, ?)`
+      );
+      for (const keyword of input.keywords) linkKeyword.run(id, keyword, now);
+    })();
+  } catch (error) {
+    // A concurrent insert can still win the UNIQUE race; return that row.
+    const duplicate =
+      (input.channelId ? getCreatorByChannelId(input.channelId) : null) ??
+      (input.handle ? getCreatorByHandle(input.handle) : null);
+    if (duplicate) return { creator: duplicate, created: false };
+    throw error;
+  }
+
+  const creator = getCreatorById(id);
+  if (!creator) throw new Error("The creator was saved but could not be read back.");
+  return { creator, created: true };
 }
 
 /** Replaces a creator's analysed videos and recomputes every derived metric. */

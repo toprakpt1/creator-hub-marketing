@@ -250,6 +250,43 @@ export async function fetchChannels(
   return out;
 }
 
+/**
+ * channels.list by handle — 1 unit. Used when someone adds a creator manually
+ * with an @handle instead of a channel id.
+ */
+export async function fetchChannelByHandle(
+  handle: string,
+  options?: CallOptions
+): Promise<ChannelItem | null> {
+  const data = await callApi<{ items?: ChannelItem[] }>(
+    "channels.list",
+    {
+      part: "snippet,statistics,contentDetails",
+      forHandle: handle,
+      maxResults: 1,
+    },
+    options
+  );
+  return data.items?.[0] ?? null;
+}
+
+/** channels.list by legacy /user/ name — 1 unit. */
+export async function fetchChannelByUsername(
+  username: string,
+  options?: CallOptions
+): Promise<ChannelItem | null> {
+  const data = await callApi<{ items?: ChannelItem[] }>(
+    "channels.list",
+    {
+      part: "snippet,statistics,contentDetails",
+      forUsername: username,
+      maxResults: 1,
+    },
+    options
+  );
+  return data.items?.[0] ?? null;
+}
+
 export interface PlaylistItem {
   contentDetails?: { videoId?: string; videoPublishedAt?: string };
   snippet?: {

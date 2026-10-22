@@ -29,6 +29,8 @@ export async function GET(request: Request) {
   const redirectUri = resolveRedirectUri(request.url);
   const secure = new URL(request.url).protocol === "https:";
 
+  console.log(`[gmail] authorize redirect_uri: ${redirectUri}`);
+
   const response = NextResponse.redirect(buildAuthUrl(state, redirectUri));
   response.cookies.set(STATE_COOKIE, state, {
     httpOnly: true,

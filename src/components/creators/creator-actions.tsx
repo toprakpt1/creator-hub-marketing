@@ -248,7 +248,13 @@ export function CreatorRowActions({
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void analyze()}>
+          <DropdownMenuItem
+            disabled={!creator.uploadsPlaylistId}
+            title={
+              creator.uploadsPlaylistId ? undefined : t("creators.analyzeUnavailableBody")
+            }
+            onSelect={() => void analyze()}
+          >
             <BarChart3 />
             {t("creators.analyzeVideos")}
           </DropdownMenuItem>

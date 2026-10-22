@@ -7,6 +7,7 @@ import {
 import {
   GmailError,
   oauthConfigured,
+  resolveRedirectUri,
   revokeGmail,
   verifyGmail,
 } from "@/lib/outreach/gmail";
@@ -14,11 +15,16 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Connected account summary for the settings panel. Never returns tokens. */
-export async function GET() {
+/**
+ * Connected account summary for the settings panel. Never returns tokens.
+ * `redirectUri` is the exact value Google must have registered — it changes
+ * with the port and host the app is opened on.
+ */
+export async function GET(request: Request) {
   return NextResponse.json({
     account: getMailAccountSummary(),
     oauthConfigured: oauthConfigured(),
+    redirectUri: resolveRedirectUri(request.url),
   });
 }
 

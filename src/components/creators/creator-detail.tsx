@@ -119,6 +119,7 @@ export function CreatorDetail({
 
   const url = channelUrl(creator);
   const band = creator.creatorScore !== null ? scoreBand(creator.creatorScore) : null;
+  const canAnalyze = Boolean(creator.uploadsPlaylistId);
 
   async function analyze() {
     setAnalyzing(true);
@@ -273,7 +274,12 @@ export function CreatorDetail({
                   </Button>
                 </>
               )}
-              <Button size="sm" disabled={analyzing} onClick={() => void analyze()}>
+              <Button
+                size="sm"
+                disabled={analyzing || !canAnalyze}
+                title={canAnalyze ? undefined : t("creators.analyzeUnavailableBody")}
+                onClick={() => void analyze()}
+              >
                 {analyzing ? <Loader2 className="animate-spin" /> : <BarChart3 />}
                 {creator.videosAnalyzed > 0
                   ? t("creatorDetail.reanalyze")
@@ -383,17 +389,32 @@ export function CreatorDetail({
               <p className="text-xs text-muted-foreground">
                 {videos.length > 0
                   ? t("creatorDetail.recentContentDesc", { count: videos.length })
-                  : t("creatorDetail.recentContentEmptyDesc")}
+                  : canAnalyze
+                    ? t("creatorDetail.recentContentEmptyDesc")
+                    : t("creators.analyzeUnavailableBody")}
               </p>
             </CardHeader>
             <CardContent className={videos.length > 0 ? "px-0 pb-0" : undefined}>
               {videos.length === 0 ? (
                 <EmptyState
                   icon={BarChart3}
-                  title={t("creatorDetail.noVideosTitle")}
-                  description={t("creatorDetail.noVideosBody")}
+                  title={
+                    canAnalyze
+                      ? t("creatorDetail.noVideosTitle")
+                      : t("creators.analyzeUnavailable")
+                  }
+                  description={
+                    canAnalyze
+                      ? t("creatorDetail.noVideosBody")
+                      : t("creators.analyzeUnavailableBody")
+                  }
                   action={
-                    <Button size="sm" disabled={analyzing} onClick={() => void analyze()}>
+                    <Button
+                      size="sm"
+                      disabled={analyzing || !canAnalyze}
+                      title={canAnalyze ? undefined : t("creators.analyzeUnavailableBody")}
+                      onClick={() => void analyze()}
+                    >
                       <BarChart3 />
                       {t("creators.analyzeVideos")}
                     </Button>

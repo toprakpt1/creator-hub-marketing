@@ -134,6 +134,18 @@ GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-...
 >
 > Farklı bir port veya `127.0.0.1` kullanıyorsan `.env` içine
 > `GOOGLE_OAUTH_REDIRECT_URI` ekle — Google'da kayıtlı adresle birebir aynı olmalı.
+> **Ayarlar → Mail** kartındaki *Yetkili yönlendirme adresi* satırı, uygulamanın
+> gerçekte gönderdiği değeri gösterir; oradan kopyalayabilirsin.
+>
+> `redirect_uri_mismatch` alırsan: uygulamayı hangi adreste açtıysan (port dahil)
+> o adres Google Cloud'da **Authorized redirect URIs** listesinde yok demektir.
+> `localhost` ile `127.0.0.1` ve `:3000` ile `:3001` ayrı adreslerdir.
+>
+> `403: access_denied` alırsan: uygulama **Testing** modunda ve seçtiğin Gmail
+> hesabı test kullanıcısı değil. **Google Auth Platform → Audience → Test users
+> → Add users** (eski arayüzde *OAuth consent screen → Test users*) altına
+> bağlanacağın adresi ekle. Test kullanıcısı eklemek uygulamayı yayınlamak
+> değildir; refresh token yine 7 günde bir dolar.
 
 ### Seçenek B — SMTP (Gmail uygulama şifresi veya sağlayıcı)
 

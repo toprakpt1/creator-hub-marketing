@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Loader2,
   Mail,
   PlugZap,
@@ -25,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useLocale, useT } from "@/lib/i18n/provider";
 import type { MailAccountSummary } from "@/lib/types";
 
@@ -47,6 +49,14 @@ export function MailAccountCard({
 
   const [testing, setTesting] = React.useState(false);
   const [disconnecting, setDisconnecting] = React.useState(false);
+  const [redirectUri, setRedirectUri] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    fetch("/api/mail/gmail")
+      .then((r) => r.json())
+      .then((d: { redirectUri?: string }) => setRedirectUri(d.redirectUri ?? null))
+      .catch(() => setRedirectUri(null));
+  }, []);
 
   const connectedOn = account
     ? new Date(account.connectedAt).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-GB", {
@@ -83,6 +93,13 @@ export function MailAccountCard({
     } finally {
       setDisconnecting(false);
     }
+  }
+
+  async function copyRedirect() {
+    if (!redirectUri) return;
+    const ok = await copyToClipboard(redirectUri);
+    if (ok) toast.success(t("settings.mailCopied"));
+    else toast.error(t("settings.mailCopyFailed"));
   }
 
   return (
@@ -191,6 +208,31 @@ export function MailAccountCard({
             <Separator />
             <p className="text-xs text-muted-foreground">{t("settings.mailSmtpFallback")}</p>
           </>
+        )}
+
+        {redirectUri && (
+          <div className="rounded-lg border border-border bg-secondary/30 p-2.5">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {t("settings.mailRedirectLabel")}
+            </div>
+            <div className="mt-1 flex items-start gap-2">
+              <code className="min-w-0 flex-1 break-all font-mono text-[11px] leading-relaxed">
+                {redirectUri}
+              </code>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 px-2"
+                onClick={() => void copyRedirect()}
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {t("settings.mailCopy")}
+              </Button>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {t("settings.mailRedirectHint")}
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>

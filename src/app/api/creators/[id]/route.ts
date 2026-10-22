@@ -7,6 +7,7 @@ import {
   updateCreatorStatus,
 } from "@/lib/db/creators";
 import type { CreatorStatus, EmailSource, EmailStatus } from "@/lib/types";
+import { isEmail } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,7 +72,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     const raw = b.email;
     const email = typeof raw === "string" && raw.trim() ? raw.trim() : null;
 
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (email && !isEmail(email)) {
       return NextResponse.json({ error: "That does not look like an email address." }, { status: 400 });
     }
 
