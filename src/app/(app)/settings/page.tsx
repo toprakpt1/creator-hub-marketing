@@ -1,7 +1,9 @@
 import { PageIntro } from "@/components/shared/page-intro";
 import { SettingsWorkspace } from "@/components/settings/settings-workspace";
 import { getDb } from "@/lib/db/client";
+import { getMailAccountSummary } from "@/lib/db/mail";
 import { getQuotaUsage } from "@/lib/db/runs";
+import { oauthConfigured } from "@/lib/outreach/gmail";
 
 export const metadata = { title: "Settings · Chest Blade Creator Hub" };
 export const dynamic = "force-dynamic";
@@ -20,6 +22,8 @@ export default function SettingsPage() {
         creatorCount={countRows("creators")}
         videoCount={countRows("youtube_videos")}
         runCount={countRows("discovery_runs")}
+        mailAccount={getMailAccountSummary()}
+        oauthConfigured={oauthConfigured()}
       />
     </div>
   );

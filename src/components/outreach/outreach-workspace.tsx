@@ -21,7 +21,14 @@ import { useLocale, useT } from "@/lib/i18n/provider";
 import type { OutreachMessage } from "@/lib/types";
 
 interface StatusPayload {
-  mailer: { configured: boolean; host?: string; fromEmail?: string };
+  mailer: {
+    configured: boolean;
+    provider: "gmail" | "smtp" | null;
+    host: string | null;
+    fromEmail: string | null;
+    needsReconnect?: boolean;
+    lastError?: string | null;
+  };
   usage: { used: number; limit: number; remaining: number };
   stats: { total: number; sent: number; failed: number; creators: number };
   messages: OutreachMessage[];
@@ -83,24 +90,46 @@ export function OutreachWorkspace() {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle>{t("outreach.setupTitle")}</CardTitle>
-          <Button variant="outline" size="sm" disabled={testing} onClick={() => void testConnection()}>
-            {testing ? <Loader2 className="animate-spin" /> : <Mail />}
-            {t("outreach.testConnection")}
-          </Button>
+          <div className="flex items-center gap-2">
+            {data.mailer.configured && (
+              <Button variant="outline" size="sm" disabled={testing} onClick={() => void testConnection()}>
+                {testing ? <Loader2 className="animate-spin" /> : <Mail />}
+                {t("outreach.testConnection")}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/settings?section=mail">
+                <Mail />
+                {t("outreach.manageMail")}
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {data.mailer.configured ? (
-            <p className="text-[13px] text-muted-foreground">
-              {t("outreach.setupConfigured", {
-                from: data.mailer.fromEmail ?? "—",
-                host: data.mailer.host ?? "—",
-              })}
+            <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+              {data.mailer.provider === "gmail"
+                ? t("outreach.setupGmail", { email: data.mailer.fromEmail ?? "—" })
+                : t("outreach.setupConfigured", {
+                    from: data.mailer.fromEmail ?? "—",
+                    host: data.mailer.host ?? "—",
+                  })}
             </p>
           ) : (
-            <p className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+            <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              {t("outreach.setupMissing")}
-            </p>
+              <div>
+                <p>
+                  {data.mailer.needsReconnect
+                    ? t("outreach.setupNeedsReconnect")
+                    : t("outreach.setupMissing")}
+                </p>
+                {data.mailer.lastError && (
+                  <p className="mt-1 opacity-80">{data.mailer.lastError}</p>
+                )}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

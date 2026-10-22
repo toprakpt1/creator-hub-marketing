@@ -16,7 +16,7 @@ Toplam süre: yaklaşık 15 dakika.
 > herkes onu kullanabilir.
 >
 > - **Kendi bilgisayarında çalıştır.** Bu haliyle internete açık bir adrese kurma.
-> - **`.env.local` dosyasını asla commit etme.** İçinde API anahtarın ve mail
+> - **`.env` ve `.env.local` dosyalarını asla commit etme.** İçinde API anahtarın ve mail
 >   şifren var. Zaten `.gitignore`'da — öyle kalsın.
 > - **Anahtarlarını asla paylaşma** — ekran görüntüsünde, videoda, hata
 >   bildiriminde veya pull request'te. Biri sızarsa hemen iptal et
@@ -33,7 +33,7 @@ Toplam süre: yaklaşık 15 dakika.
 
 ```bash
 npm install
-cp .env.example .env.local
+cp .env.example .env
 npm run preview
 ```
 
@@ -43,7 +43,7 @@ SQLite veritabanı ve tabloları ilk açılışta kendiliğinden oluşur. Migrat
 komutu yok, **kurulacak Supabase, Postgres veya Docker da yok** — tüm veritabanı
 `data/creator-hub.db` adlı tek bir yerel dosya.
 
-`.env.local` boşken de uygulama açılır; sadece arama yapamaz ve mail atamazsın.
+`.env` boşken de uygulama açılır; sadece arama yapamaz ve mail atamazsın.
 
 ---
 
@@ -62,7 +62,7 @@ arama demek, kullanacağından çok daha fazlası.
    - **API restrictions** → *Restrict key* → **YouTube Data API v3**'ü işaretle.
    - **Application restrictions** → *None* bırak. Anahtar tarayıcıdan değil
      sunucudan kullanılıyor; HTTP referrer kısıtı koyarsan çalışmaz.
-6. `.env.local` dosyasına yapıştır:
+6. `.env` dosyasına yapıştır:
 
 ```env
 YOUTUBE_API_KEY=AIza...senin-anahtarin
@@ -95,20 +95,50 @@ ve günlük sınırı aşacak aramayı baştan reddeder.
 
 ---
 
-## 3. Mail gönderimi (SMTP)
+## 3. Mail gönderimi (Gmail OAuth2)
 
-Uygulama **herhangi bir SMTP sunucusu** üzerinden gönderir — kendi mail servisi
-yoktur, bir sağlayıcıya bağlı değildir. Aşağıdakilerden birini seçip ayarlarını
-`.env.local`'a yaz.
+İki yol var: **Ayarlar → Mail** ekranından Gmail hesabı bağlamak (önerilen) ya da
+`.env` içine bir SMTP sunucusu yazmak. Gmail bağlıyken SMTP ayarları yok sayılır;
+bağlantı kaldırılırsa otomatik olarak SMTP'ye döner.
 
-### Seçenek A — Gmail (ücretsiz, domain gerekmez) ← *buradan başla*
+### Seçenek A — Gmail'i uygulamadan bağla (OAuth2) ← *buradan başla*
 
-Günde yaklaşık **500 alıcı**. Test ve küçük ölçekli iletişim için yeterli.
+Günde yaklaşık **500 alıcı**. Şifre saklanmaz; yalnızca `gmail.send` izni alınır,
+gelen kutusu okunamaz.
 
 > İletişim için **ayrı bir Gmail hesabı** kullan, kişisel hesabını değil.
 > Yanıtlar karışmaz ve bir sorun çıkarsa kişisel mailin etkilenmez.
 
-**Adımlar**
+**Google Cloud tarafı (bir kez)**
+
+1. <https://console.cloud.google.com> → yeni proje.
+2. **APIs & Services → Library** → *Gmail API* → **Enable**.
+3. **OAuth consent screen** → External → uygulama adı + e-posta → kendini
+   **Test users** listesine ekle.
+4. **Credentials → Create credentials → OAuth client ID → Web application**.
+5. **Authorized redirect URIs** alanına tam olarak şunu yaz:
+   `http://localhost:3000/api/mail/gmail/callback`
+6. Client ID ve Client Secret'i `.env` dosyasına ekle:
+
+```env
+GOOGLE_OAUTH_CLIENT_ID=....apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-...
+```
+
+7. Uygulamayı yeniden başlat → **Ayarlar → Mail → Gmail ile bağlan**.
+
+> **7 gün uyarısı:** Consent screen **Testing** modunda kalırsa Google refresh
+> token'ı 7 günde bir geçersiz kılar ve haftada bir yeniden bağlanman gerekir.
+> Bunu önlemek için consent screen'i **In production**'a al. Doğrulama
+> istemez; "unverified app" uyarısıyla 100 kullanıcıya kadar çalışır.
+>
+> Farklı bir port veya `127.0.0.1` kullanıyorsan `.env` içine
+> `GOOGLE_OAUTH_REDIRECT_URI` ekle — Google'da kayıtlı adresle birebir aynı olmalı.
+
+### Seçenek B — SMTP (Gmail uygulama şifresi veya sağlayıcı)
+
+Gmail hesabı bağlamak istemiyorsan uygulama herhangi bir SMTP sunucusuyla da
+gönderir. Gmail için:
 
 1. Gönderim yapacağın Gmail hesabını aç.
 2. 2 Adımlı Doğrulama'yı aç: <https://myaccount.google.com/signinoptions/twosv>
@@ -117,7 +147,7 @@ Günde yaklaşık **500 alıcı**. Test ve küçük ölçekli iletişim için ye
    Google çoğu hesapta bu girişi Güvenlik menüsünden kaldırdı).
 4. Bir isim ver (örn. *Creator Hub*) → **Oluştur**.
 5. 16 haneli şifreyi kopyala. Google boşluklu gösterir; **boşlukları sil**.
-6. `.env.local` dosyasına ekle:
+6. `.env` dosyasına ekle:
 
 ```env
 SMTP_HOST=smtp.gmail.com
@@ -134,7 +164,7 @@ SMTP_DAILY_LIMIT=450
 gerçekten açılmamıştır. Authenticator uygulaması eklemek 2FA'yı açmakla aynı şey
 değildir — önce 2. adımı bitir.
 
-### Seçenek B — Gerçek bir gönderim sağlayıcısı (ücretsiz katman, domain ister)
+### Seçenek C — Gerçek bir gönderim sağlayıcısı (ücretsiz katman, domain ister)
 
 Birkaç kişiden fazlasına yazmaya başlayınca mailin spam'e düşmemesi için daha
 iyi. Hepsi aynı değişkenlere yazacağın SMTP bilgisi verir.
@@ -152,7 +182,7 @@ Bunlar sahip olduğun bir domaini doğrulamanı ve **SPF**, **DKIM**, **DMARC** 
 kayıtlarını eklemeni ister. Zaten olay bu: mailinin spam'e düşmesini engelleyen
 şey o kayıtlar.
 
-### Seçenek C — Ethereal (ücretsiz, geliştirme için)
+### Seçenek D — Ethereal (ücretsiz, geliştirme için)
 
 Maili **iletmek yerine yakalayan** sahte bir SMTP sunucusu, sana bir önizleme
 linki veriyor. Geliştirirken mükemmel — hesap açmana gerek yok, yanlışlıkla
@@ -162,7 +192,7 @@ gerçek birine mail gitme riski yok.
 node -e "require('nodemailer').createTestAccount().then(a=>console.log(a))"
 ```
 
-Dönen host, user ve pass değerlerini `.env.local`'a yaz.
+Dönen host, user ve pass değerlerini `.env` dosyasına yaz.
 
 ### Önerilmeyenler
 
@@ -199,17 +229,23 @@ mesajı bir insanın onaylaması ve günlük sınır.
 | `YOUTUBE_API_KEY` | arama için | — | YouTube Data API v3 anahtarı. **Sadece sunucuda** |
 | `YOUTUBE_DAILY_QUOTA` | hayır | `10000` | Uygulamanın aşmayı reddettiği günlük birim |
 | `DATABASE_PATH` | hayır | `./data/creator-hub.db` | SQLite dosyasının yeri |
-| `SMTP_HOST` | gönderim için | — | örn. `smtp.gmail.com` |
+| `GOOGLE_OAUTH_CLIENT_ID` | Gmail bağlamak için | — | Google Cloud OAuth client ID |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Gmail bağlamak için | — | Google Cloud OAuth client secret |
+| `GOOGLE_OAUTH_REDIRECT_URI` | hayır | istek origin'i + `/api/mail/gmail/callback` | Google'da kayıtlı adres farklıysa |
+| `MAIL_TOKEN_KEY` | hayır | `data/.mail-token-key` | Saklanan Gmail token'larını şifreleyen 32 baytlık anahtar |
+| `SMTP_HOST` | SMTP için | — | örn. `smtp.gmail.com`; Gmail bağlıyken kullanılmaz |
 | `SMTP_PORT` | hayır | `587` | `587` STARTTLS, `465` doğrudan TLS |
-| `SMTP_USER` | gönderim için | — | Posta kutusu kullanıcısı, genelde adresin |
-| `SMTP_PASS` | gönderim için | — | Uygulama şifresi — **asla** hesap şifren |
+| `SMTP_USER` | SMTP için | — | Posta kutusu kullanıcısı, genelde adresin |
+| `SMTP_PASS` | SMTP için | — | Uygulama şifresi — **asla** hesap şifren |
 | `SMTP_FROM_NAME` | hayır | `Chest Blade` | Mailde görünen gönderen adı |
 | `SMTP_FROM_EMAIL` | hayır | `SMTP_USER` | Çoğu sağlayıcı farklı bir From'u reddeder |
 | `SMTP_DAILY_LIMIT` | hayır | `500` | Günde gönderilecek mail sınırı |
 
 **Hiçbirinin başına `NEXT_PUBLIC_` koyma.** O önek değeri tarayıcıya taşır, yani
 anahtarını ve mail şifreni siteye giren herkese açar. Uygulama sırları yalnızca
-sunucu kodunda okur (`lib/youtube/client.ts` ve `lib/outreach/mailer.ts`).
+sunucu kodunda okur (`lib/youtube/client.ts`, `lib/outreach/mailer.ts` ve
+`lib/outreach/gmail.ts`). Gmail token'ları SQLite'a yazılmadan önce AES-256-GCM
+ile şifrelenir; `.env` ve `data/` git'e girmez.
 
 ---
 
@@ -222,6 +258,9 @@ commit:
   anahtarı sil, yenisini oluştur.
 - **Gmail uygulama şifresi** — <https://myaccount.google.com/apppasswords> →
   kaldır. Anında çalışmaz olur, hesap şifren etkilenmez.
+- **Gmail OAuth bağlantısı** — uygulamada **Ayarlar → Mail → Bağlantıyı kaldır**
+  ya da <https://myaccount.google.com/permissions> üzerinden uygulamanın
+  erişimini sil. Token'lar şifreli olarak `data/creator-hub.db` içinde durur.
 
 İptal etmek anlık ve ücretsiz. Önce iptal et, sonra düşün.
 

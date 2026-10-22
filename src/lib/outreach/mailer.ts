@@ -1,15 +1,22 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
+import { getMailAccount, markMailAccountVerified } from "@/lib/db/mail";
+import {
+  GmailError,
+  sendViaGmail,
+  verifyGmail,
+} from "@/lib/outreach/gmail";
 
 /**
- * SMTP transport.
+ * The mail provider layer.
  *
- * This is the only place SMTP credentials are read. They are plain server
- * environment variables — never `NEXT_PUBLIC_*` — so they cannot reach the
- * browser, exactly like the YouTube API key.
+ * A connected Gmail account (OAuth2) is preferred; a plain SMTP server from
+ * the environment is the fallback. Both paths expose the same four functions,
+ * so the rest of the app does not care which one is live.
  *
- * Any SMTP server works: Gmail with an app password to start, a provider like
- * Brevo later, or Ethereal while developing. Switching is a config change.
+ * SMTP credentials are plain server environment variables — never
+ * `NEXT_PUBLIC_*` — so they cannot reach the browser, exactly like the
+ * YouTube API key.
  */
 
 export class MailerError extends Error {
@@ -17,14 +24,20 @@ export class MailerError extends Error {
     message: string,
     readonly code:
       | "not_configured"
+      | "needs_reconnect"
       | "auth_failed"
       | "connection_failed"
       | "rejected"
+      | "rate_limited"
       | "unknown"
   ) {
     super(message);
     this.name = "MailerError";
   }
+}
+
+export function defaultFromName(): string {
+  return process.env.SMTP_FROM_NAME?.trim() || "Chest Blade";
 }
 
 export interface MailerConfig {
@@ -54,13 +67,49 @@ export function readConfig(): MailerConfig | null {
 }
 
 /** What the panel may show about the mail setup. Never includes the password. */
-export function mailerStatus() {
+export interface MailerStatus {
+  configured: boolean;
+  provider: "gmail" | "smtp" | null;
+  host: string | null;
+  fromName: string;
+  fromEmail: string | null;
+  connectedAt?: string | null;
+  lastVerifiedAt?: string | null;
+  needsReconnect?: boolean;
+  lastError?: string | null;
+}
+
+export function mailerStatus(): MailerStatus {
+  const account = getMailAccount();
+  if (account) {
+    return {
+      configured: !account.needsReconnect,
+      provider: "gmail",
+      host: "gmail.googleapis.com",
+      fromName: defaultFromName(),
+      fromEmail: account.email,
+      connectedAt: account.connectedAt,
+      lastVerifiedAt: account.lastVerifiedAt,
+      needsReconnect: account.needsReconnect,
+      lastError: account.lastError,
+    };
+  }
+
   const config = readConfig();
-  if (!config) return { configured: false as const };
+  if (!config) {
+    return {
+      configured: false,
+      provider: null,
+      host: null,
+      fromName: defaultFromName(),
+      fromEmail: null,
+    };
+  }
+
   return {
-    configured: true as const,
+    configured: true,
+    provider: "smtp",
     host: config.host,
-    port: config.port,
     fromName: config.fromName,
     fromEmail: config.fromEmail,
   };
@@ -88,6 +137,20 @@ function transporterFor(config: MailerConfig): Transporter {
 const TRANSIENT = new Set(["ESOCKET", "ETIMEDOUT", "ECONNECTION", "ECONNRESET"]);
 
 function translate(error: unknown): MailerError {
+  if (error instanceof GmailError) {
+    const code =
+      error.code === "needs_reconnect"
+        ? "needs_reconnect"
+        : error.code === "not_configured"
+          ? "not_configured"
+          : error.code === "forbidden"
+            ? "rejected"
+            : error.code === "rate_limited"
+              ? "rate_limited"
+              : "unknown";
+    return new MailerError(error.message, code);
+  }
+
   const e = error as { code?: string; responseCode?: number; message?: string };
   const code = e?.code ?? "";
   const message = e?.message ?? "Sending failed.";
@@ -112,9 +175,19 @@ function translate(error: unknown): MailerError {
 
 /** Confirms the credentials without sending anything. */
 export async function verifyConnection(): Promise<void> {
+  if (getMailAccount()) {
+    try {
+      await verifyGmail();
+      markMailAccountVerified();
+      return;
+    } catch (e) {
+      throw translate(e);
+    }
+  }
+
   const config = readConfig();
   if (!config) {
-    throw new MailerError("No SMTP settings found. Add them to .env.local.", "not_configured");
+    throw new MailerError("No mail account is connected. Connect Gmail in Settings.", "not_configured");
   }
   const transporter = transporterFor(config);
   try {
@@ -139,9 +212,27 @@ export async function sendMail(input: {
   html: string;
   replyTo?: string;
 }): Promise<SendResult> {
+  const account = getMailAccount();
+  if (account) {
+    try {
+      const result = await sendViaGmail({
+        fromName: defaultFromName(),
+        fromEmail: account.email,
+        to: input.to,
+        subject: input.subject,
+        text: input.text,
+        html: input.html,
+        replyTo: input.replyTo,
+      });
+      return { messageId: result.messageId, previewUrl: null };
+    } catch (e) {
+      throw translate(e);
+    }
+  }
+
   const config = readConfig();
   if (!config) {
-    throw new MailerError("No SMTP settings found. Add them to .env.local.", "not_configured");
+    throw new MailerError("No mail account is connected. Connect Gmail in Settings.", "not_configured");
   }
 
   const message = {

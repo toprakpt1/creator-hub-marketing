@@ -29,8 +29,11 @@ import type { Creator, EmailTemplate } from "@/lib/types";
 
 interface MailerStatus {
   configured: boolean;
+  provider?: "gmail" | "smtp" | null;
   fromName?: string;
-  fromEmail?: string;
+  fromEmail?: string | null;
+  needsReconnect?: boolean;
+  lastError?: string | null;
 }
 
 /**

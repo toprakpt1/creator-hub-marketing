@@ -205,3 +205,21 @@ CREATE TABLE IF NOT EXISTS outreach_messages (
 
 CREATE INDEX IF NOT EXISTS idx_outreach_creator ON outreach_messages(creator_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_outreach_day ON outreach_messages(sent_at);
+
+-- ------------------------------------------------------------------
+-- Connected mail account. Exactly one row (id = 1) in this phase.
+-- Tokens are AES-256-GCM encrypted before they reach this table, so a
+-- database copy alone cannot be used to send mail as the user.
+-- ------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS mail_account (
+  id                      INTEGER PRIMARY KEY CHECK (id = 1),
+  provider                TEXT NOT NULL DEFAULT 'gmail',
+  email                   TEXT NOT NULL,
+  refresh_token_enc       TEXT NOT NULL,
+  access_token_enc        TEXT,
+  access_token_expires_at INTEGER,
+  scope                   TEXT,
+  connected_at            TEXT NOT NULL,
+  last_verified_at        TEXT,
+  last_error              TEXT
+);

@@ -5,7 +5,9 @@ build
 .DS_Store
 *.pem
 npm-debug.log*
+.env
 .env*.local
+!.env.example
 next-env.d.ts
 .vercel
 *.tsbuildinfo

@@ -258,3 +258,13 @@ export interface OutreachMessage {
   sentAt: string | null;
   createdAt: string;
 }
+
+/** The connected Gmail account, as the panel is allowed to see it. */
+export interface MailAccountSummary {
+  provider: "gmail";
+  email: string;
+  connectedAt: string;
+  lastVerifiedAt: string | null;
+  needsReconnect: boolean;
+  lastError: string | null;
+}

@@ -52,7 +52,7 @@ Node.js 18.18+ gerekir.
 git clone https://github.com/UgurKeskekci/creator-hub-marketing.git
 cd creator-hub-marketing
 npm install
-cp .env.example .env.local   # sonra içini doldur
+cp .env.example .env   # sonra içini doldur
 npm run preview
 ```
 
@@ -66,8 +66,13 @@ YOUTUBE_API_KEY=AIza...
 YOUTUBE_DAILY_QUOTA=10000
 DATABASE_PATH=./data/creator-hub.db
 
-# Gönderim — herhangi bir SMTP sunucusu.
-# Gmail için hesap şifren değil, uygulama şifresi gerekir.
+# Gmail — Ayarlar → Mail ekranından bağlanır (OAuth2, sadece gmail.send izni).
+# Google Cloud'da OAuth client oluşturup şu adresi redirect URI olarak ekle:
+#   http://localhost:3000/api/mail/gmail/callback
+GOOGLE_OAUTH_CLIENT_ID=....apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-...
+
+# Yedek: Gmail bağlı değilken herhangi bir SMTP sunucusu kullanılabilir.
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=sen@gmail.com
@@ -76,9 +81,9 @@ SMTP_FROM_NAME=Stüdyo Adın
 SMTP_DAILY_LIMIT=450
 ```
 
-Bu değerler **yalnızca sunucu tarafında** okunur, tarayıcıya asla gitmez. Hiçbirinin başına `NEXT_PUBLIC_` koyma.
+Bu değerler **yalnızca sunucu tarafında** okunur, tarayıcıya asla gitmez. Hiçbirinin başına `NEXT_PUBLIC_` koyma. Gmail token'ları veritabanına yazılmadan önce şifrelenir.
 
-**→ [Adım adım kurulum rehberi](docs/SETUP.md)** — YouTube anahtarı, Gmail uygulama şifresi, ücretsiz alternatifler, tüm ortam değişkenleri.
+**→ [Adım adım kurulum rehberi](docs/SETUP.md)** — YouTube anahtarı, Gmail OAuth kurulumu, uygulama şifresi alternatifi, tüm ortam değişkenleri.
 
 ---
 
@@ -129,7 +134,7 @@ Eksik veri cezalandırılmaz, nötr puanlanır. Gizli abone sayısı hiçbir kan
 
 ### İletişim
 
-E-postası kayıtlı üreticinin satırında ve profilinde bir **gönder** düğmesi çıkar. Mesaj şablondan doldurulmuş halde açılır, düzenleyebilirsin, kendi SMTP kutundan gider.
+E-postası kayıtlı üreticinin satırında ve profilinde bir **gönder** düğmesi çıkar. Mesaj şablondan doldurulmuş halde açılır, düzenleyebilirsin; bağladığın Gmail hesabından (ya da yedek SMTP kutusundan) gider.
 
 ```
 şablon + üretici → doldurulmuş önizleme → sen düzenlersin → gönder
@@ -166,12 +171,17 @@ src/
       quota                  GET   bugünkü kullanım
       outreach/send          POST  tek mail gönder
       outreach/status        GET   posta ayarı + gönderim kaydı
+      mail/gmail/connect     GET   Google izin ekranına yönlendir
+      mail/gmail/callback    GET   OAuth dönüşü, token'ları şifreleyip sakla
+      mail/gmail             GET   bağlı hesap · POST test · DELETE kaldır
     (app)/                   giriş yapılmış ekranlar
   lib/
-    db/        client.ts (bağlantı + şema), creators.ts, groups.ts, schema.sql
+    db/        client.ts (bağlantı + şema), creators.ts, groups.ts, mail.ts, schema.sql
     youtube/   client.ts (tipli API + kota muhasebesi), discovery.ts
-    outreach/  mailer.ts (SMTP — mail bilgilerinin okunduğu tek yer)
+    outreach/  mailer.ts (Gmail ↔ SMTP yönlendirmesi)
+               gmail.ts (OAuth2 + Gmail API), mime.ts (ham mesaj)
                render.ts (şablon değişkenleri, önizleme ve gönderim ortak)
+    crypto.ts  (Gmail token'ları için AES-256-GCM)
     scoring/   metrics.ts (yerel hesap), score.ts (kurallar)
     i18n/      en.ts / tr.ts sözlükleri
 ```

@@ -1,20 +1,23 @@
 "use client";
 
 import * as React from "react";
-import { Bot, Building2, Database, Gauge, Plug } from "lucide-react";
+import { Bot, Building2, Database, Gauge, Mail, Plug } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "@/components/ui/sonner";
+import { MailAccountCard } from "@/components/settings/mail-account-card";
 import { PlatformIcon } from "@/components/shared/platform-icon";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { ALL_PLATFORMS, PLATFORM_META } from "@/lib/constants";
 import { useT } from "@/lib/i18n/provider";
-import type { QuotaUsage } from "@/lib/types";
+import type { MailAccountSummary, QuotaUsage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [
   { id: "general", labelKey: "settings.sectionGeneral", icon: Building2 },
+  { id: "mail", labelKey: "settings.sectionMail", icon: Mail },
   { id: "platforms", labelKey: "settings.sectionPlatforms", icon: Plug },
   { id: "quota", labelKey: "settings.sectionQuota", icon: Gauge },
   { id: "automation", labelKey: "settings.sectionAutomation", icon: Bot },
@@ -38,14 +41,44 @@ export function SettingsWorkspace({
   creatorCount,
   videoCount,
   runCount,
+  mailAccount,
+  oauthConfigured,
 }: {
   quota: QuotaUsage;
   creatorCount: number;
   videoCount: number;
   runCount: number;
+  mailAccount: MailAccountSummary | null;
+  oauthConfigured: boolean;
 }) {
   const t = useT();
   const [section, setSection] = React.useState("general");
+
+  // Allow deep links like /settings?section=mail from the outreach panel.
+  React.useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("section");
+    if (requested && SECTIONS.some((s) => s.id === requested)) {
+      setSection(requested);
+    }
+  }, []);
+
+  // The OAuth callback lands back here with a result in the query string.
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("gmail");
+    if (!result) return;
+
+    if (result === "connected") {
+      toast.success(t("settings.mailCallbackConnected"));
+    } else {
+      toast.error(t("settings.mailCallbackError", { reason: params.get("reason") ?? "unknown" }));
+    }
+
+    params.delete("gmail");
+    params.delete("reason");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  }, [t]);
 
   return (
     <div className="grid gap-5 lg:grid-cols-[200px_minmax(0,1fr)]">
@@ -101,6 +134,10 @@ export function SettingsWorkspace({
               </dl>
             </CardContent>
           </Card>
+        )}
+
+        {section === "mail" && (
+          <MailAccountCard account={mailAccount} oauthConfigured={oauthConfigured} />
         )}
 
         {section === "platforms" && (

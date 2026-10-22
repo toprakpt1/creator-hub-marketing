@@ -8,7 +8,7 @@ import {
   markSent,
   queueMessage,
 } from "@/lib/db/outreach";
-import { MailerError, readConfig, sendMail } from "@/lib/outreach/mailer";
+import { MailerError, mailerStatus, sendMail } from "@/lib/outreach/mailer";
 import { bodyToHtml, renderTemplate, unresolvedVariables } from "@/lib/outreach/render";
 
 export const runtime = "nodejs";
@@ -22,13 +22,14 @@ export const dynamic = "force-dynamic";
  * exactly one recipient instead of a whole batch.
  */
 export async function POST(request: Request) {
-  const config = readConfig();
-  if (!config) {
+  const mail = mailerStatus();
+  if (!mail.configured) {
     return NextResponse.json(
       {
-        error:
-          "Email sending is not configured. Add SMTP_HOST, SMTP_USER and SMTP_PASS to .env.local.",
-        code: "not_configured",
+        error: mail.needsReconnect
+          ? mail.lastError ?? "The Gmail connection needs to be renewed in Settings."
+          : "Email sending is not configured. Connect Gmail in Settings or add SMTP settings to .env.",
+        code: mail.needsReconnect ? "needs_reconnect" : "not_configured",
       },
       { status: 503 }
     );
@@ -137,7 +138,7 @@ export async function POST(request: Request) {
     templateId: templateId ?? null,
     campaignId: campaignId ?? null,
     toEmail: creator.email,
-    fromEmail: config.fromEmail,
+    fromEmail: mail.fromEmail ?? "",
     subject,
     body: text,
   });
