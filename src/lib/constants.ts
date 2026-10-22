@@ -188,8 +188,25 @@ export function scoreBand(score: number): {
   return { key: "low", tone: "muted", color: "hsl(215 16% 45%)" };
 }
 
+/**
+ * Defaults for the game name and link.
+ *
+ * The live values live in the database and are edited on the Settings screen
+ * (`Ayarlar → Oyun`), so nothing here needs changing to ship your own game.
+ * These are only the fallback for a database that has never been saved to —
+ * and the fallback the panel uses before the settings request comes back.
+ */
 export const GAME_NAME = "Chest Blade";
-export const STEAM_LINK = "https://store.steampowered.com/app/chestblade";
+
+/**
+ * Where `{{game_link}}` and `{{steam_link}}` point when Settings has no link.
+ *
+ * Empty on purpose. A made-up app id used to live here, which put a 404 in
+ * every outreach email — a link nobody can open is one of the clearest spam
+ * signals there is. While there is no link at all, the composer refuses to send
+ * a template that references it instead of quietly mailing a dead URL.
+ */
+export const STEAM_LINK = "";
 
 /** Country codes we can render a flag for; anything else falls back. */
 /**

@@ -239,6 +239,16 @@ export interface EmailTemplate {
   updatedAt: string;
 }
 
+/** An image uploaded for a template, stored under data/uploads. */
+export interface EmailAsset {
+  id: string;
+  templateId: string;
+  filename: string;
+  mime: string;
+  size: number;
+  createdAt: string;
+}
+
 /** One outreach email we handed to the mail server. */
 export type OutreachStatus = "queued" | "sent" | "failed";
 
@@ -263,6 +273,8 @@ export interface OutreachMessage {
 export interface MailAccountSummary {
   provider: "gmail";
   email: string;
+  /** Display name recipients see. Null means "use the fallback". */
+  fromName: string | null;
   connectedAt: string;
   lastVerifiedAt: string | null;
   needsReconnect: boolean;

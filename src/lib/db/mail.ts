@@ -14,6 +14,7 @@ interface Row {
   id: number;
   provider: string;
   email: string;
+  from_name: string | null;
   refresh_token_enc: string;
   access_token_enc: string | null;
   access_token_expires_at: number | null;
@@ -34,6 +35,7 @@ function summaryOf(row: Row): MailAccountSummary {
   return {
     provider: "gmail",
     email: row.email,
+    fromName: row.from_name,
     connectedAt: row.connected_at,
     lastVerifiedAt: row.last_verified_at,
     needsReconnect: Boolean(row.last_error),
@@ -70,6 +72,7 @@ export function getMailAccountSummary(): MailAccountSummary | null {
 
 export function saveMailAccount(input: {
   email: string;
+  fromName?: string | null;
   refreshToken: string;
   accessToken: string;
   accessTokenExpiresAt: number;
@@ -79,12 +82,14 @@ export function saveMailAccount(input: {
   getDb()
     .prepare(
       `INSERT INTO mail_account
-         (id, provider, email, refresh_token_enc, access_token_enc,
+         (id, provider, email, from_name, refresh_token_enc, access_token_enc,
           access_token_expires_at, scope, connected_at, last_verified_at, last_error)
-       VALUES (1, 'gmail', ?, ?, ?, ?, ?, ?, ?, NULL)
+       VALUES (1, 'gmail', ?, ?, ?, ?, ?, ?, ?, ?, NULL)
        ON CONFLICT(id) DO UPDATE SET
          provider = 'gmail',
          email = excluded.email,
+         -- Keep a name the person edited in Settings across reconnects.
+         from_name = COALESCE(mail_account.from_name, excluded.from_name),
          refresh_token_enc = excluded.refresh_token_enc,
          access_token_enc = excluded.access_token_enc,
          access_token_expires_at = excluded.access_token_expires_at,
@@ -95,6 +100,7 @@ export function saveMailAccount(input: {
     )
     .run(
       input.email,
+      input.fromName?.trim() || null,
       encryptSecret(input.refreshToken),
       encryptSecret(input.accessToken),
       input.accessTokenExpiresAt,
@@ -102,6 +108,13 @@ export function saveMailAccount(input: {
       now,
       now
     );
+}
+
+/** The name recipients see in their inbox. Empty clears it back to the fallback. */
+export function updateMailFromName(name: string | null): void {
+  getDb()
+    .prepare("UPDATE mail_account SET from_name = ? WHERE id = 1")
+    .run(name?.trim() || null);
 }
 
 export function updateMailAccessToken(accessToken: string, expiresAt: number): void {

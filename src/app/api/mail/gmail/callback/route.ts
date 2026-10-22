@@ -48,10 +48,11 @@ export async function GET(request: NextRequest) {
   }
 
   let email: string;
+  let name: string | null;
   let tokens: Awaited<ReturnType<typeof exchangeCode>>["tokens"];
   try {
     const redirectUri = resolveRedirectUri(request.url);
-    ({ email, tokens } = await exchangeCode(code, redirectUri));
+    ({ email, name, tokens } = await exchangeCode(code, redirectUri));
   } catch (e) {
     const reason = e instanceof GmailError ? e.code : "exchange_failed";
     console.error("[gmail] token exchange failed:", e);
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
   try {
     saveMailAccount({
       email,
+      fromName: name,
       refreshToken: tokens.refresh_token as string,
       accessToken: tokens.access_token,
       accessTokenExpiresAt: Date.now() + tokens.expires_in * 1000,

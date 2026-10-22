@@ -9,6 +9,7 @@ import {
   Loader2,
   Mail,
   PlugZap,
+  Save,
   Unplug,
 } from "lucide-react";
 import {
@@ -24,6 +25,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -50,6 +53,12 @@ export function MailAccountCard({
   const [testing, setTesting] = React.useState(false);
   const [disconnecting, setDisconnecting] = React.useState(false);
   const [redirectUri, setRedirectUri] = React.useState<string | null>(null);
+  const [fromName, setFromName] = React.useState(account?.fromName ?? "");
+  const [savingName, setSavingName] = React.useState(false);
+
+  React.useEffect(() => {
+    setFromName(account?.fromName ?? "");
+  }, [account?.fromName]);
 
   React.useEffect(() => {
     fetch("/api/mail/gmail")
@@ -78,6 +87,25 @@ export function MailAccountCard({
       toast.error((e as Error).message);
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function saveFromName() {
+    setSavingName(true);
+    try {
+      const res = await fetch("/api/mail/gmail", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromName }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(body.error ?? t("settings.mailFromNameError"));
+      toast.success(t("settings.mailFromNameSaved"));
+      router.refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingName(false);
     }
   }
 
@@ -136,6 +164,31 @@ export function MailAccountCard({
                 </span>
               </p>
             )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="mail-from-name">{t("settings.mailFromName")}</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="mail-from-name"
+                  value={fromName}
+                  onChange={(e) => setFromName(e.target.value)}
+                  placeholder={account.email.split("@")[0]}
+                  maxLength={80}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={savingName}
+                  onClick={() => void saveFromName()}
+                >
+                  {savingName ? <Loader2 className="animate-spin" /> : <Save />}
+                  {t("common.save")}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {t("settings.mailFromNameHint")}
+              </p>
+            </div>
 
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" size="sm" disabled={testing} onClick={() => void test()}>

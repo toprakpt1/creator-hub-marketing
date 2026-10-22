@@ -180,6 +180,20 @@ CREATE TABLE IF NOT EXISTS email_templates (
   updated_at  TEXT NOT NULL
 );
 
+-- Images uploaded for a template. The bytes live in data/uploads/<id>, so the
+-- database never carries multi-megabyte blobs. A send turns each row into a
+-- CID part, which is why no public URL is needed for the image to show up.
+CREATE TABLE IF NOT EXISTS email_assets (
+  id          TEXT PRIMARY KEY,
+  template_id TEXT NOT NULL REFERENCES email_templates(id) ON DELETE CASCADE,
+  filename    TEXT NOT NULL,
+  mime        TEXT NOT NULL,
+  size        INTEGER NOT NULL,
+  created_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_assets_template ON email_assets(template_id);
+
 -- ------------------------------------------------------------------
 -- Outreach. One row per message we actually handed to the mail server,
 -- so the panel can show what was sent, to whom and what came back.
@@ -215,6 +229,9 @@ CREATE TABLE IF NOT EXISTS mail_account (
   id                      INTEGER PRIMARY KEY CHECK (id = 1),
   provider                TEXT NOT NULL DEFAULT 'gmail',
   email                   TEXT NOT NULL,
+  -- The display name recipients see. Filled from the Google profile on
+  -- connect, then editable in Settings (a game studio, not the account name).
+  from_name               TEXT,
   refresh_token_enc       TEXT NOT NULL,
   access_token_enc        TEXT,
   access_token_expires_at INTEGER,
@@ -222,4 +239,17 @@ CREATE TABLE IF NOT EXISTS mail_account (
   connected_at            TEXT NOT NULL,
   last_verified_at        TEXT,
   last_error              TEXT
+);
+
+-- ------------------------------------------------------------------
+-- The game the templates talk about. Exactly one row (id = 1).
+-- Kept in the database rather than in a source constant so the name and
+-- the store link can be changed from Settings without a rebuild — and so
+-- the panel preview and the outgoing mail resolve the same values.
+-- ------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_settings (
+  id          INTEGER PRIMARY KEY CHECK (id = 1),
+  game_name   TEXT NOT NULL DEFAULT '',
+  game_link   TEXT NOT NULL DEFAULT '',
+  updated_at  TEXT NOT NULL
 );

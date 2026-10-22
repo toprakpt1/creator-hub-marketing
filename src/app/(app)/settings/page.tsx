@@ -3,6 +3,7 @@ import { SettingsWorkspace } from "@/components/settings/settings-workspace";
 import { getDb } from "@/lib/db/client";
 import { getMailAccountSummary } from "@/lib/db/mail";
 import { getQuotaUsage } from "@/lib/db/runs";
+import { getGameSettings } from "@/lib/db/settings";
 import { oauthConfigured } from "@/lib/outreach/gmail";
 
 export const metadata = { title: "Settings · Chest Blade Creator Hub" };
@@ -24,6 +25,7 @@ export default function SettingsPage() {
         runCount={countRows("discovery_runs")}
         mailAccount={getMailAccountSummary()}
         oauthConfigured={oauthConfigured()}
+        game={getGameSettings()}
       />
     </div>
   );

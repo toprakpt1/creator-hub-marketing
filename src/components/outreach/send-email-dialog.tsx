@@ -23,7 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
-import { renderTemplate, unresolvedVariables } from "@/lib/outreach/render";
+import { renderBodyHtml, renderTemplate, unresolvedVariables } from "@/lib/outreach/render";
+import { useGameSettings } from "@/lib/use-game-settings";
 import { useT } from "@/lib/i18n/provider";
 import type { Creator, EmailTemplate } from "@/lib/types";
 
@@ -57,6 +58,7 @@ export function SendEmailDialog({
 }) {
   const t = useT();
   const router = useRouter();
+  const game = useGameSettings();
 
   const [templates, setTemplates] = React.useState<EmailTemplate[] | null>(null);
   const [templateId, setTemplateId] = React.useState<string>("");
@@ -67,12 +69,16 @@ export function SendEmailDialog({
   const [contacted, setContacted] = React.useState(false);
   const [sending, setSending] = React.useState(false);
   const [touched, setTouched] = React.useState(false);
+  const [duplicateWarning, setDuplicateWarning] = React.useState(false);
+  const [duplicateAck, setDuplicateAck] = React.useState(false);
 
   // Everything the dialog needs is fetched on open, so a template written a
   // moment ago is already selectable.
   React.useEffect(() => {
     if (!open) return;
     setTouched(false);
+    setDuplicateWarning(false);
+    setDuplicateAck(false);
 
     fetch("/api/templates")
       .then((r) => r.json())
@@ -103,18 +109,18 @@ export function SendEmailDialog({
   // Load the chosen template, but never overwrite edits already made.
   React.useEffect(() => {
     if (!selected || touched) return;
-    setSubject(renderTemplate(selected.subject, creator));
-    setBody(renderTemplate(selected.body, creator));
-  }, [selected, creator, touched]);
+    setSubject(renderTemplate(selected.subject, creator, game));
+    setBody(renderTemplate(selected.body, creator, game));
+  }, [selected, creator, touched, game]);
 
   const leftover = React.useMemo(
     () => [
       ...new Set([
-        ...unresolvedVariables(subject, creator),
-        ...unresolvedVariables(body, creator),
+        ...unresolvedVariables(subject, creator, game),
+        ...unresolvedVariables(body, creator, game),
       ]),
     ],
-    [subject, body, creator]
+    [subject, body, creator, game]
   );
 
   const canSend =
@@ -125,7 +131,7 @@ export function SendEmailDialog({
     leftover.length === 0 &&
     !sending;
 
-  async function send() {
+  async function send(force = false) {
     setSending(true);
     try {
       const res = await fetch("/api/outreach/send", {
@@ -137,11 +143,28 @@ export function SendEmailDialog({
           subject,
           body,
           allowResend: contacted,
+          allowDuplicate: force || duplicateAck,
         }),
       });
-      const data = (await res.json()) as { error?: string; usage?: { used: number } };
-      if (!res.ok) throw new Error(data.error ?? "Sending failed.");
+      const data = (await res.json()) as {
+        error?: string;
+        code?: string;
+        usage?: { used: number };
+      };
 
+      if (!res.ok) {
+        // The server noticed this body already went out today. Ask once, then
+        // honour the answer — the same text to everyone is what causes the spam
+        // placement this guard exists to prevent.
+        if (data.code === "duplicate_content") {
+          setDuplicateWarning(true);
+          setDuplicateAck(false);
+        }
+        throw new Error(data.error ?? "Sending failed.");
+      }
+
+      setDuplicateWarning(false);
+      setDuplicateAck(false);
       toast.success(t("outreach.sentToast", { name: creator.name }), {
         description: t("outreach.sentToastBody", { email: creator.email ?? "" }),
       });
@@ -164,7 +187,9 @@ export function SendEmailDialog({
             {creator.email
               ? t("outreach.composeTo", {
                   email: creator.email,
-                  from: mailer?.fromEmail ?? "—",
+                  from: mailer?.fromName
+                    ? `${mailer.fromName} <${mailer.fromEmail ?? ""}>`
+                    : mailer?.fromEmail ?? "—",
                 })
               : t("outreach.noEmail")}
           </DialogDescription>
@@ -181,6 +206,13 @@ export function SendEmailDialog({
           <p className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             {t("outreach.alreadyContacted", { name: creator.name })}
+          </p>
+        )}
+
+        {duplicateWarning && (
+          <p className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {t("outreach.duplicateWarning")}
           </p>
         )}
 
@@ -223,6 +255,8 @@ export function SendEmailDialog({
               onChange={(e) => {
                 setSubject(e.target.value);
                 setTouched(true);
+                setDuplicateWarning(false);
+                setDuplicateAck(false);
               }}
             />
           </div>
@@ -237,6 +271,20 @@ export function SendEmailDialog({
               onChange={(e) => {
                 setBody(e.target.value);
                 setTouched(true);
+                setDuplicateWarning(false);
+                setDuplicateAck(false);
+              }}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>{t("outreach.previewLabel")}</Label>
+            <div
+              className="max-h-64 overflow-y-auto rounded-md border border-border bg-secondary/10 px-3 py-3 [&_img]:rounded-md"
+              dangerouslySetInnerHTML={{
+                __html: renderBodyHtml(body, {
+                  assetSrc: (id) => `/api/assets/${id}`,
+                }),
               }}
             />
           </div>
@@ -258,9 +306,13 @@ export function SendEmailDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>
             {t("common.cancel")}
           </Button>
-          <Button disabled={!canSend} onClick={() => void send()}>
+          <Button disabled={!canSend} onClick={() => void send(duplicateWarning)}>
             {sending ? <Loader2 className="animate-spin" /> : <Send />}
-            {sending ? t("outreach.sending") : t("outreach.sendNow")}
+            {sending
+              ? t("outreach.sending")
+              : duplicateWarning
+                ? t("outreach.sendAnyway")
+                : t("outreach.sendNow")}
           </Button>
         </DialogFooter>
       </DialogContent>

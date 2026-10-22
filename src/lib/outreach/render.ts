@@ -1,4 +1,5 @@
 import type { Creator } from "@/lib/types";
+import { GAME_NAME, STEAM_LINK } from "@/lib/constants";
 
 /**
  * Template variables, shared by the preview and the sender.
@@ -8,8 +9,19 @@ import type { Creator } from "@/lib/types";
  * another.
  */
 
-export const GAME_NAME = "Chest Blade";
-export const STEAM_LINK = "https://store.steampowered.com/app/chestblade";
+export { GAME_NAME, STEAM_LINK } from "@/lib/constants";
+
+/**
+ * The game a template talks about. Stored in the database and edited from
+ * Settings, so it is passed in rather than read from a constant — but callers
+ * that have no value handy fall back to the constants above.
+ */
+export interface GameIdentity {
+  name: string;
+  link: string;
+}
+
+export const DEFAULT_GAME: GameIdentity = { name: GAME_NAME, link: STEAM_LINK };
 
 export const TEMPLATE_VARIABLES = [
   { token: "{{creator_name}}", key: "varCreatorName" },
@@ -19,14 +31,18 @@ export const TEMPLATE_VARIABLES = [
   { token: "{{country}}", key: "varCountry" },
   { token: "{{keyword}}", key: "varKeyword" },
   { token: "{{game_name}}", key: "varGameName" },
+  { token: "{{game_link}}", key: "varGameLink" },
   { token: "{{steam_link}}", key: "varSteamLink" },
 ] as const;
 
 /** Shown in the preview where a creator has no value for a variable. */
 export const MISSING = "—";
 
-function variableMap(creator: Creator | null): Record<string, string> {
-  return {
+function variableMap(
+  creator: Creator | null,
+  game: GameIdentity = DEFAULT_GAME
+): Record<string, string> {
+  const map: Record<string, string> = {
     creator_name: creator?.name?.trim() || "there",
     // The display name reads naturally inside a sentence; a raw @handle does
     // not ("I came across @gamingmeetsexperience4332").
@@ -37,14 +53,29 @@ function variableMap(creator: Creator | null): Record<string, string> {
       creator?.averageViews != null ? creator.averageViews.toLocaleString("en-US") : MISSING,
     country: creator?.country ?? "your region",
     keyword: creator?.discoveredKeywords[0] ?? "indie games",
-    game_name: GAME_NAME,
-    steam_link: STEAM_LINK,
+    game_name: game.name || GAME_NAME,
   };
+
+  // Both spellings are offered because older templates say {{steam_link}}. When
+  // no link is configured neither key exists, so `unresolvedVariables` blocks
+  // the send instead of letting the token collapse silently into an empty line
+  // — or worse, into a link that goes nowhere.
+  const link = game.link.trim();
+  if (link) {
+    map.game_link = link;
+    map.steam_link = link;
+  }
+
+  return map;
 }
 
 /** Replaces {{tokens}}; unknown ones are left visible rather than blanked. */
-export function renderTemplate(text: string, creator: Creator | null): string {
-  const map = variableMap(creator);
+export function renderTemplate(
+  text: string,
+  creator: Creator | null,
+  game: GameIdentity = DEFAULT_GAME
+): string {
+  const map = variableMap(creator, game);
   return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (full, k: string) => map[k] ?? full);
 }
 
@@ -53,8 +84,12 @@ export function renderTemplate(text: string, creator: Creator | null): string {
  * ones this particular creator has no data behind. An unanalysed creator would
  * otherwise receive "average — views", which reads as a broken mail merge.
  */
-export function unresolvedVariables(text: string, creator: Creator | null): string[] {
-  const map = variableMap(creator);
+export function unresolvedVariables(
+  text: string,
+  creator: Creator | null,
+  game: GameIdentity = DEFAULT_GAME
+): string[] {
+  const map = variableMap(creator, game);
   const found = new Set<string>();
   for (const m of text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)) {
     const value = map[m[1]];
@@ -64,23 +99,9 @@ export function unresolvedVariables(text: string, creator: Creator | null): stri
 }
 
 /**
- * Plain-text body turned into minimal HTML. Outreach mail reads better as
- * plain text and lands in the inbox more often, so both parts are sent and
- * the HTML stays deliberately unstyled.
+ * The body is turned into HTML by `markup.ts`, which also understands images
+ * and labelled links. It is re-exported here so callers that already render
+ * template variables have one import for the whole body pipeline.
  */
-export function bodyToHtml(text: string): string {
-  const escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  const linked = escaped.replace(
-    /(https?:\/\/[^\s<]+)/g,
-    (url) => `<a href="${url}">${url}</a>`
-  );
-
-  return linked
-    .split(/\n{2,}/)
-    .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
-    .join("\n");
-}
+export { extractAssetIds, renderBodyHtml, renderBodyPlainText } from "@/lib/outreach/markup";
+export type { BodyRenderOptions } from "@/lib/outreach/markup";

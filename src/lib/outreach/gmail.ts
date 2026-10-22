@@ -4,7 +4,7 @@ import {
   markMailAccountError,
   updateMailAccessToken,
 } from "@/lib/db/mail";
-import { buildRawMessage } from "@/lib/outreach/mime";
+import { buildRawMessage, type MailAttachment } from "@/lib/outreach/mime";
 
 /**
  * Gmail over Google OAuth2.
@@ -112,7 +112,7 @@ async function readGoogleError(response: Response): Promise<GoogleErrorBody> {
 export async function exchangeCode(
   code: string,
   redirectUri: string
-): Promise<{ email: string; tokens: TokenResponse }> {
+): Promise<{ email: string; name: string | null; tokens: TokenResponse }> {
   const { clientId, clientSecret } = clientCredentials();
 
   const response = await fetch(TOKEN_ENDPOINT, {
@@ -149,12 +149,12 @@ export async function exchangeCode(
   if (!profile.ok) {
     throw new GmailError("Could not read the Google account address.", "needs_reconnect");
   }
-  const { email } = (await profile.json()) as { email?: string };
+  const { email, name } = (await profile.json()) as { email?: string; name?: string };
   if (!email) {
     throw new GmailError("Google did not return an email address.", "needs_reconnect");
   }
 
-  return { email, tokens };
+  return { email, name: name?.trim() || null, tokens };
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
@@ -221,6 +221,7 @@ export async function sendViaGmail(input: {
   text: string;
   html: string;
   replyTo?: string;
+  attachments?: MailAttachment[];
 }): Promise<GmailSendResult> {
   const raw = await buildRawMessage(input);
 

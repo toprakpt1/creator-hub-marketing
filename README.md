@@ -150,7 +150,10 @@ E-postası kayıtlı üreticinin satırında ve profilinde bir **gönder** düğ
 | Gördüğün gidiyor | Diyalog, ekranda duran metni gönderir — önizlemeden farklı olabilecek ikinci bir doldurma adımı yoktur |
 | Boş değişken engeli | İzlenme verisi olmayan üreticiye "ortalama — izlenme" gidemez |
 | Mükerrer engeli | Daha önce mail atılmış üreticiye yanlışlıkla ikinci kez atılamaz |
+| Aynı metin engeli | Son 24 saatte aynı konu + gövde iki kişiye gittiyse uyarır — Gmail aynı mailleri gruplayıp spam'e atıyor |
+| Gönderim aralığı | `MAIL_SEND_INTERVAL_SECONDS` (varsayılan 120 sn) dolmadan yeni mail çıkmaz |
 | Günlük sınır | `SMTP_DAILY_LIMIT`, her gönderimde kontrol edilir |
+| Çıkış yolu | Her mesaj `List-Unsubscribe` başlığı taşır, tek tıkla çıkmak mümkün |
 | Dürüst kayıt | Kayıt SMTP çağrısından **önce** yazılır; çökme olsa bile iz kalır. Başarısızlıklar sebebiyle birlikte saklanır |
 
 E-posta adresleri **elle girilir** — uygulama adres tahmin etmez, aramaz, toplamaz. Kanalın herkese açık "Hakkında" sayfasından veya video açıklamasından bulup tabloda E-posta hücresine tıklayarak yapıştırırsın.
@@ -226,7 +229,9 @@ Bu repo düzenli güncellenecek. Her sürüm [Releases](../../releases) sayfası
 
 ## 🎮 Kendi oyunun için kullanma
 
-Chest Blade'e özgü tek şey [`src/lib/outreach/render.ts`](src/lib/outreach/render.ts) içindeki iki sabit (`GAME_NAME`, `STEAM_LINK`) ve `src/lib/i18n/` içindeki metinler. Onları değiştir, kendi anahtarını ve posta kutunu bağla, kendi kelimelerinle ara.
+Chest Blade'e özgü tek şey **Ayarlar → Oyun** kartındaki isim ve mağaza linki, bir de `src/lib/i18n/` içindeki metinler. İkisini de oradan değiştir; `{{game_name}}` ve `{{game_link}}` tüm şablonlarda ve gönderim önizlemesinde anında güncellenir. Kod değiştirmen veya yeniden derlemen gerekmez.
+
+> Mağaza linkini boş bırakırsan `{{game_link}}` / `{{steam_link}}` kullanan şablonlar **gönderilemez** — ölü bir link, düzeltilmemiş bir şablondan daha çok zarar verir.
 
 Fork'la, kur, boz, öğren. Sadece internete açık bir adrese koyma ve anahtarlarını commit etme.
 

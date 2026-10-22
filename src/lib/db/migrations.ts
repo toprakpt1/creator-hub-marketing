@@ -13,7 +13,20 @@ import { computeScore } from "@/lib/scoring/score";
  * the query modules.
  */
 export function runDataMigrations(db: Database.Database): void {
+  ensureMailFromName(db);
   rescoreLegacyBreakdowns(db);
+}
+
+/**
+ * `mail_account.from_name` arrived after the first Gmail connections existed.
+ * CREATE TABLE IF NOT EXISTS cannot add a column, so old databases need this.
+ */
+function ensureMailFromName(db: Database.Database): void {
+  const columns = db.prepare("PRAGMA table_info(mail_account)").all() as { name: string }[];
+  if (columns.length === 0) return;
+  if (columns.some((column) => column.name === "from_name")) return;
+  db.exec("ALTER TABLE mail_account ADD COLUMN from_name TEXT");
+  console.log("[db] added mail_account.from_name");
 }
 
 /**

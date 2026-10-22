@@ -1,11 +1,16 @@
 import "server-only";
 import nodemailer, { type Transporter } from "nodemailer";
-import { getMailAccount, markMailAccountVerified } from "@/lib/db/mail";
+import {
+  getMailAccount,
+  getMailAccountSummary,
+  markMailAccountVerified,
+} from "@/lib/db/mail";
 import {
   GmailError,
   sendViaGmail,
   verifyGmail,
 } from "@/lib/outreach/gmail";
+import { buildMessageBuffer, type MailAttachment } from "@/lib/outreach/mime";
 
 /**
  * The mail provider layer.
@@ -36,8 +41,21 @@ export class MailerError extends Error {
   }
 }
 
+/**
+ * The name in the recipient's inbox. Settings wins, then the environment, then
+ * a neutral fallback derived from the connected mailbox — never a hard-coded
+ * game name, which used to leak into every customer's email client.
+ */
 export function defaultFromName(): string {
-  return process.env.SMTP_FROM_NAME?.trim() || "Chest Blade";
+  const account = getMailAccountSummary();
+  const stored = account?.fromName?.trim();
+  if (stored) return stored;
+
+  const env = process.env.SMTP_FROM_NAME?.trim();
+  if (env) return env;
+
+  if (account?.email) return account.email.split("@")[0];
+  return "Creator Hub";
 }
 
 export interface MailerConfig {
@@ -60,7 +78,7 @@ export function readConfig(): MailerConfig | null {
     port: Number(process.env.SMTP_PORT ?? 587),
     user,
     pass,
-    fromName: process.env.SMTP_FROM_NAME?.trim() || "Chest Blade",
+    fromName: process.env.SMTP_FROM_NAME?.trim() || "Creator Hub",
     // Most providers reject a From that is not the authenticated mailbox.
     fromEmail: process.env.SMTP_FROM_EMAIL?.trim() || user,
   };
@@ -127,6 +145,10 @@ function transporterFor(config: MailerConfig): Transporter {
     // 465 is implicit TLS; 587 upgrades with STARTTLS.
     secure: config.port === 465,
     auth: { user: config.user, pass: config.pass },
+    // Nodemailer introduces itself with the machine's hostname, and a Linux
+    // laptop usually has no FQDN — so it falls back to `[127.0.0.1]` in EHLO
+    // and in the Message-ID. A sending domain costs nothing and looks normal.
+    name: config.fromEmail.split("@")[1] || undefined,
     connectionTimeout: 15_000,
     greetingTimeout: 10_000,
     socketTimeout: 30_000,
@@ -211,6 +233,7 @@ export async function sendMail(input: {
   text: string;
   html: string;
   replyTo?: string;
+  attachments?: MailAttachment[];
 }): Promise<SendResult> {
   const account = getMailAccount();
   if (account) {
@@ -223,6 +246,7 @@ export async function sendMail(input: {
         text: input.text,
         html: input.html,
         replyTo: input.replyTo,
+        attachments: input.attachments,
       });
       return { messageId: result.messageId, previewUrl: null };
     } catch (e) {
@@ -235,14 +259,19 @@ export async function sendMail(input: {
     throw new MailerError("No mail account is connected. Connect Gmail in Settings.", "not_configured");
   }
 
-  const message = {
-    from: { name: config.fromName, address: config.fromEmail },
+  // Build the same Gmail-friendly tree as the API path. Nodemailer's default
+  // alternative > related nesting makes Gmail show the plain-text version.
+  const raw = await buildMessageBuffer({
+    fromName: config.fromName,
+    fromEmail: config.fromEmail,
     to: input.to,
-    replyTo: input.replyTo || config.fromEmail,
     subject: input.subject,
     text: input.text,
     html: input.html,
-  };
+    replyTo: input.replyTo,
+    attachments: input.attachments,
+  });
+  const envelope = { from: config.fromEmail, to: [input.to] };
 
   let lastError: unknown;
 
@@ -251,7 +280,7 @@ export async function sendMail(input: {
   for (let attempt = 0; attempt < 2; attempt++) {
     const transporter = transporterFor(config);
     try {
-      const info = await transporter.sendMail(message);
+      const info = await transporter.sendMail({ envelope, raw });
       const preview = nodemailer.getTestMessageUrl(info);
       return { messageId: info.messageId ?? "", previewUrl: preview === false ? null : preview };
     } catch (e) {

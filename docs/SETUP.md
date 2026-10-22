@@ -249,9 +249,10 @@ mesajı bir insanın onaylaması ve günlük sınır.
 | `SMTP_PORT` | hayır | `587` | `587` STARTTLS, `465` doğrudan TLS |
 | `SMTP_USER` | SMTP için | — | Posta kutusu kullanıcısı, genelde adresin |
 | `SMTP_PASS` | SMTP için | — | Uygulama şifresi — **asla** hesap şifren |
-| `SMTP_FROM_NAME` | hayır | `Chest Blade` | Mailde görünen gönderen adı |
+| `SMTP_FROM_NAME` | hayır | `Creator Hub` | Mailde görünen gönderen adı — marka değil **insan adı** yaz |
 | `SMTP_FROM_EMAIL` | hayır | `SMTP_USER` | Çoğu sağlayıcı farklı bir From'u reddeder |
-| `SMTP_DAILY_LIMIT` | hayır | `500` | Günde gönderilecek mail sınırı |
+| `SMTP_DAILY_LIMIT` | hayır | `20` | Günde gönderilecek mail sınırı. Isınma boyunca düşük tut |
+| `MAIL_SEND_INTERVAL_SECONDS` | hayır | `120` | İki mail arasında zorunlu bekleme (saniye) |
 
 **Hiçbirinin başına `NEXT_PUBLIC_` koyma.** O önek değeri tarayıcıya taşır, yani
 anahtarını ve mail şifreni siteye giren herkese açar. Uygulama sırları yalnızca

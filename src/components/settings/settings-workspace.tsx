@@ -8,10 +8,12 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "@/components/ui/sonner";
 import { MailAccountCard } from "@/components/settings/mail-account-card";
+import { GameCard } from "@/components/settings/game-card";
 import { PlatformIcon } from "@/components/shared/platform-icon";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
 import { ALL_PLATFORMS, PLATFORM_META } from "@/lib/constants";
 import { useT } from "@/lib/i18n/provider";
+import type { GameIdentity } from "@/lib/outreach/render";
 import type { MailAccountSummary, QuotaUsage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +45,7 @@ export function SettingsWorkspace({
   runCount,
   mailAccount,
   oauthConfigured,
+  game,
 }: {
   quota: QuotaUsage;
   creatorCount: number;
@@ -50,6 +53,7 @@ export function SettingsWorkspace({
   runCount: number;
   mailAccount: MailAccountSummary | null;
   oauthConfigured: boolean;
+  game: GameIdentity;
 }) {
   const t = useT();
   const [section, setSection] = React.useState("general");
@@ -113,38 +117,44 @@ export function SettingsWorkspace({
 
       <div className="min-w-0 space-y-4">
         {section === "general" && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>{t("settings.workspaceTitle")}</CardTitle>
-              <p className="text-xs text-muted-foreground">{t("settings.workspaceDesc")}</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
-                <div>
-                  <div className="text-[13px] font-medium">{t("settings.languageTitle")}</div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {t("settings.languageDesc")}
-                  </p>
-                </div>
-                <LanguageSwitcher variant="full" />
-              </div>
+          <div className="space-y-4">
+            <GameCard initial={game} />
 
-              <Separator />
-
-              <dl className="divide-y divide-border/70 text-[13px]">
-                {[
-                  [t("settings.gameName"), "Chest Blade"],
-                  [t("settings.dbLocation"), process.env.NEXT_PUBLIC_DB_HINT ?? "./data/creator-hub.db"],
-                  [t("settings.apiKeyStatus"), t("settings.apiKeyServerOnly")],
-                ].map(([label, value]) => (
-                  <div key={label} className="flex items-start justify-between gap-3 py-2">
-                    <dt className="text-xs text-muted-foreground">{label}</dt>
-                    <dd className="max-w-[62%] truncate text-right font-mono text-xs">{value}</dd>
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle>{t("settings.workspaceTitle")}</CardTitle>
+                <p className="text-xs text-muted-foreground">{t("settings.workspaceDesc")}</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+                  <div>
+                    <div className="text-[13px] font-medium">{t("settings.languageTitle")}</div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {t("settings.languageDesc")}
+                    </p>
                   </div>
-                ))}
-              </dl>
-            </CardContent>
-          </Card>
+                  <LanguageSwitcher variant="full" />
+                </div>
+
+                <Separator />
+
+                <dl className="divide-y divide-border/70 text-[13px]">
+                  {[
+                    [
+                      t("settings.dbLocation"),
+                      process.env.NEXT_PUBLIC_DB_HINT ?? "./data/creator-hub.db",
+                    ],
+                    [t("settings.apiKeyStatus"), t("settings.apiKeyServerOnly")],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-start justify-between gap-3 py-2">
+                      <dt className="text-xs text-muted-foreground">{label}</dt>
+                      <dd className="max-w-[62%] truncate text-right font-mono text-xs">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {section === "mail" && (

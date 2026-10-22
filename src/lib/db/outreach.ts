@@ -11,7 +11,20 @@ import type { OutreachMessage } from "@/lib/types";
  */
 
 /** Gmail allows roughly this many recipients a day on a free account. */
-export const DEFAULT_DAILY_LIMIT = Number(process.env.SMTP_DAILY_LIMIT ?? 500);
+export const DEFAULT_DAILY_LIMIT = Number(process.env.SMTP_DAILY_LIMIT ?? 20);
+
+/**
+ * The gap enforced between two sends.
+ *
+ * Daily volume is a ceiling, not the thing that gets mail filed as spam. What
+ * does is several identical messages a few seconds apart: no person writes that
+ * way. The default is deliberately slow until the mailbox has a history.
+ */
+export const SEND_INTERVAL_MS =
+  Number(process.env.MAIL_SEND_INTERVAL_SECONDS ?? 120) * 1000;
+
+/** Same subject and body to this many people in one day is already a pattern. */
+export const DUPLICATE_CONTENT_THRESHOLD = 2;
 
 interface Row {
   id: string;
@@ -119,6 +132,33 @@ export function alreadyContacted(creatorId: string): boolean {
     )
     .get(creatorId) as { c: number };
   return row.c > 0;
+}
+
+/** When the last successful send went out, so sends can be spaced apart. */
+export function lastSentAt(): string | null {
+  const row = getDb()
+    .prepare(`SELECT MAX(sent_at) AS at FROM outreach_messages WHERE status = 'sent'`)
+    .get() as { at: string | null };
+  return row.at;
+}
+
+/**
+ * How many times this exact subject and body went out in the window.
+ *
+ * Gmail clusters incoming mail by content, so a template mailed to five people
+ * becomes a fingerprint — and once one copy is marked, the next identical copy
+ * is "similar to previously identified spam". Counting recent duplicates is the
+ * cheapest way to see that happening before the recipient does.
+ */
+export function recentDuplicates(subject: string, body: string, hours = 24): number {
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const row = getDb()
+    .prepare(
+      `SELECT COUNT(*) AS c FROM outreach_messages
+        WHERE status = 'sent' AND sent_at >= ? AND subject = ? AND body = ?`
+    )
+    .get(since, subject, body) as { c: number };
+  return row.c;
 }
 
 export function listMessages(limit = 100): OutreachMessage[] {

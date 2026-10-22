@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   Copy,
   Eye,
+  ImagePlus,
   Languages,
+  Link2,
+  Loader2,
   Mail,
   MoreHorizontal,
   Pencil,
@@ -13,10 +16,19 @@ import {
   Save,
   Search,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,39 +47,41 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { copyWithToast } from "@/lib/clipboard";
 import { relativeTime } from "@/lib/format";
 import { useLocale, useT } from "@/lib/i18n/provider";
+import { isImageMimeType, MAX_IMAGE_BYTES } from "@/lib/outreach/markup";
+import {
+  renderBodyHtml,
+  renderBodyPlainText,
+  renderTemplate,
+  TEMPLATE_VARIABLES,
+} from "@/lib/outreach/render";
+import { useGameSettings } from "@/lib/use-game-settings";
 import type { Creator, EmailTemplate } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Variables filled from a real creator record at render time. */
-const VARIABLES = [
-  { token: "{{creator_name}}", key: "varCreatorName" },
-  { token: "{{channel_name}}", key: "varChannelName" },
-  { token: "{{subscribers}}", key: "varSubscribers" },
-  { token: "{{average_views}}", key: "varAverageViews" },
-  { token: "{{country}}", key: "varCountry" },
-  { token: "{{keyword}}", key: "varKeyword" },
-  { token: "{{game_name}}", key: "varGameName" },
-  { token: "{{steam_link}}", key: "varSteamLink" },
-];
+interface TextRange {
+  start: number;
+  end: number;
+}
 
-const GAME_NAME = "Chest Blade";
-const STEAM_LINK = "https://store.steampowered.com/app/chestblade";
+/** Normalizes a typed address the same way the sender will. */
+function absoluteHttpUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:" ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
 
-/** Replaces {{tokens}}; unknown ones are left visible rather than blanked. */
-function render(text: string, creator: Creator | null): string {
-  const map: Record<string, string> = {
-    creator_name: creator?.name ?? "there",
-    channel_name: creator?.handle ?? creator?.name ?? "your channel",
-    subscribers:
-      creator?.subscriberCount != null ? creator.subscriberCount.toLocaleString("en-US") : "—",
-    average_views:
-      creator?.averageViews != null ? creator.averageViews.toLocaleString("en-US") : "—",
-    country: creator?.country ?? "your region",
-    keyword: creator?.discoveredKeywords[0] ?? "indie games",
-    game_name: GAME_NAME,
-    steam_link: STEAM_LINK,
-  };
-  return text.replace(/\{\{\s*(\w+)\s*\}\}/g, (full, k: string) => map[k] ?? full);
+function altFromUrl(value: string): string {
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`).hostname;
+  } catch {
+    return "image";
+  }
 }
 
 function Highlighted({ body }: { body: string }) {
@@ -108,6 +122,7 @@ export function TemplatesWorkspace({
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
+  const game = useGameSettings();
 
   const [query, setQuery] = React.useState("");
   const [selectedId, setSelectedId] = React.useState(templates[0]?.id ?? "");
@@ -116,6 +131,20 @@ export function TemplatesWorkspace({
   const [draft, setDraft] = React.useState<{ subject: string; body: string; name: string } | null>(
     null
   );
+
+  const bodyRef = React.useRef<HTMLTextAreaElement | null>(null);
+  /** Selection captured when a dialog opens; the dialog steals focus. */
+  const [insertRange, setInsertRange] = React.useState<TextRange | null>(null);
+
+  const [linkOpen, setLinkOpen] = React.useState(false);
+  const [linkText, setLinkText] = React.useState("");
+  const [linkUrl, setLinkUrl] = React.useState("");
+
+  const [imageOpen, setImageOpen] = React.useState(false);
+  const [imageUrl, setImageUrl] = React.useState("");
+  const [imageAlt, setImageAlt] = React.useState("");
+  const [imageFile, setImageFile] = React.useState<File | null>(null);
+  const [imageBusy, setImageBusy] = React.useState(false);
 
   const needle = query.trim().toLowerCase();
   const filtered = templates.filter(
@@ -130,6 +159,103 @@ export function TemplatesWorkspace({
     body: selected?.body ?? "",
   };
 
+  function currentSelection(): TextRange | null {
+    const el = bodyRef.current;
+    if (!el) return null;
+    return { start: el.selectionStart, end: el.selectionEnd };
+  }
+
+  /** Inserts at the caret (or a remembered range) instead of appending. */
+  function insertAt(snippet: string, range?: TextRange | null) {
+    const el = bodyRef.current;
+    const body = current.body;
+    const start = range?.start ?? el?.selectionStart ?? body.length;
+    const end = range?.end ?? el?.selectionEnd ?? body.length;
+    setDraft({ ...current, body: `${body.slice(0, start)}${snippet}${body.slice(end)}` });
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const caret = start + snippet.length;
+      el.setSelectionRange(caret, caret);
+    });
+  }
+
+  function openLinkDialog() {
+    const range = currentSelection();
+    setInsertRange(range);
+    setLinkText(
+      range && range.end > range.start ? current.body.slice(range.start, range.end).trim() : ""
+    );
+    setLinkUrl("");
+    setLinkOpen(true);
+  }
+
+  function insertLink() {
+    const href = absoluteHttpUrl(linkUrl);
+    if (!href) {
+      toast.error(t("templates.invalidUrl"));
+      return;
+    }
+    const label = linkText.trim() || linkUrl.trim();
+    insertAt(`[${label.replace(/[[\]]/g, " ").trim()}](${linkUrl.trim()})`, insertRange);
+    setLinkOpen(false);
+  }
+
+  function openImageDialog() {
+    setInsertRange(currentSelection());
+    setImageUrl("");
+    setImageAlt("");
+    setImageFile(null);
+    setImageOpen(true);
+  }
+
+  async function insertImage() {
+    if (!selected) return;
+
+    if (imageFile) {
+      if (!isImageMimeType(imageFile.type)) {
+        toast.error(t("templates.imageTypeError"));
+        return;
+      }
+      if (imageFile.size > MAX_IMAGE_BYTES) {
+        toast.error(t("templates.imageTooLarge"));
+        return;
+      }
+
+      setImageBusy(true);
+      try {
+        const form = new FormData();
+        form.append("file", imageFile);
+        const res = await fetch(`/api/templates/${selected.id}/assets`, {
+          method: "POST",
+          body: form,
+        });
+        const data = (await res.json()) as { asset?: { id: string }; error?: string };
+        if (!res.ok || !data.asset) {
+          throw new Error(data.error ?? t("templates.imageUploadError"));
+        }
+        const alt = (imageAlt.trim() || imageFile.name).replace(/[[\]]/g, " ").trim();
+        insertAt(`\n\n![${alt}](asset:${data.asset.id})\n\n`, insertRange);
+        toast.success(t("templates.imageUploaded"));
+        setImageOpen(false);
+      } catch (e) {
+        toast.error((e as Error).message);
+      } finally {
+        setImageBusy(false);
+      }
+      return;
+    }
+
+    const href = absoluteHttpUrl(imageUrl);
+    if (!href) {
+      toast.error(t("templates.invalidUrl"));
+      return;
+    }
+    const alt = (imageAlt.trim() || altFromUrl(href)).replace(/[[\]]/g, " ").trim();
+    insertAt(`\n\n![${alt}](${imageUrl.trim()})\n\n`, insertRange);
+    setImageOpen(false);
+  }
+
   async function createTemplate() {
     try {
       const res = await fetch("/api/templates", {
@@ -138,7 +264,7 @@ export function TemplatesWorkspace({
         body: JSON.stringify({
           name: t("templates.newTemplateName"),
           language: "English",
-          subject: t("templates.starterSubject", { game: GAME_NAME }),
+          subject: t("templates.starterSubject", { game: game.name }),
           body: t("templates.starterBody"),
         }),
       });
@@ -318,7 +444,12 @@ export function TemplatesWorkspace({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuItem
-                    onSelect={() => void copyWithToast(current.body, t("templates.copyBody"))}
+                    onSelect={() =>
+                      void copyWithToast(
+                        renderBodyPlainText(current.body),
+                        t("templates.copyBody")
+                      )
+                    }
                   >
                     <Copy />
                     {t("templates.copyBody")}
@@ -377,10 +508,25 @@ export function TemplatesWorkspace({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="tpl-body">{t("templates.body")}</Label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label htmlFor="tpl-body">{t("templates.body")}</Label>
+                    {editing && (
+                      <div className="flex items-center gap-1.5">
+                        <Button type="button" variant="outline" size="sm" onClick={openLinkDialog}>
+                          <Link2 />
+                          {t("templates.insertLink")}
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={openImageDialog}>
+                          <ImagePlus />
+                          {t("templates.insertImage")}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                   {editing ? (
                     <Textarea
                       id="tpl-body"
+                      ref={bodyRef}
                       value={current.body}
                       onChange={(e) => setDraft({ ...current, body: e.target.value })}
                       className="min-h-[340px] font-sans text-[13px] leading-relaxed"
@@ -390,6 +536,9 @@ export function TemplatesWorkspace({
                       <Highlighted body={current.body} />
                     </div>
                   )}
+                  <p className="text-[11px] text-muted-foreground">
+                    {t("templates.markupHint")}
+                  </p>
                 </div>
 
                 <div className="rounded-lg border border-border p-3">
@@ -397,12 +546,12 @@ export function TemplatesWorkspace({
                     {t("templates.variables")}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {VARIABLES.map((v) => (
+                    {TEMPLATE_VARIABLES.map((v) => (
                       <SimpleTooltip key={v.token} label={t(`templates.${v.key}`)}>
                         <button
                           onClick={() => {
                             if (!editing) return;
-                            setDraft({ ...current, body: current.body + v.token });
+                            insertAt(v.token);
                             toast.success(t("templates.variableInserted", { token: v.token }));
                           }}
                           className={cn(
@@ -427,7 +576,7 @@ export function TemplatesWorkspace({
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <div className="min-w-0">
                       <div className="truncate text-[13px] font-medium">
-                        {render(current.subject, sampleCreator)}
+                        {renderTemplate(current.subject, sampleCreator, game)}
                       </div>
                       <div className="text-[11px] text-muted-foreground">
                         {sampleCreator
@@ -439,9 +588,14 @@ export function TemplatesWorkspace({
                       </div>
                     </div>
                   </div>
-                  <pre className="max-h-[420px] overflow-y-auto whitespace-pre-wrap px-4 py-4 font-sans text-[13px] leading-relaxed text-foreground">
-                    {render(current.body, sampleCreator)}
-                  </pre>
+                  <div
+                    className="max-h-[420px] overflow-y-auto px-4 py-4 text-[13px] leading-relaxed text-foreground [&_img]:rounded-md"
+                    dangerouslySetInnerHTML={{
+                      __html: renderBodyHtml(renderTemplate(current.body, sampleCreator, game), {
+                        assetSrc: (id) => `/api/assets/${id}`,
+                      }),
+                    }}
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {sampleCreator ? t("templates.previewNote") : t("templates.previewNoteEmpty")}
@@ -451,6 +605,114 @@ export function TemplatesWorkspace({
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={linkOpen} onOpenChange={setLinkOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("templates.insertLink")}</DialogTitle>
+            <DialogDescription>{t("templates.linkDialogBody")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-link-text">{t("templates.linkText")}</Label>
+              <Input
+                id="tpl-link-text"
+                value={linkText}
+                onChange={(e) => setLinkText(e.target.value)}
+                placeholder={t("templates.linkTextPlaceholder")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-link-url">{t("templates.linkUrl")}</Label>
+              <Input
+                id="tpl-link-url"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://store.steampowered.com/..."
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button onClick={insertLink} disabled={!linkUrl.trim()}>
+              <Link2 />
+              {t("templates.insert")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={imageOpen}
+        onOpenChange={(v) => {
+          if (!imageBusy) setImageOpen(v);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("templates.insertImage")}</DialogTitle>
+            <DialogDescription>{t("templates.imageDialogBody")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-image-file">{t("templates.uploadFromComputer")}</Label>
+              <Input
+                id="tpl-image-file"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  setImageFile(file);
+                  if (file) setImageUrl("");
+                }}
+              />
+              <p className="text-[11px] text-muted-foreground">{t("templates.imageLimits")}</p>
+            </div>
+
+            <p className="text-center text-[11px] uppercase tracking-wide text-muted-foreground">
+              {t("templates.orUseUrl")}
+            </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-image-url">{t("templates.imageUrl")}</Label>
+              <Input
+                id="tpl-image-url"
+                value={imageUrl}
+                onChange={(e) => {
+                  setImageUrl(e.target.value);
+                  if (e.target.value) setImageFile(null);
+                }}
+                placeholder="https://.../screenshot.png"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-image-alt">{t("templates.imageAlt")}</Label>
+              <Input
+                id="tpl-image-alt"
+                value={imageAlt}
+                onChange={(e) => setImageAlt(e.target.value)}
+                placeholder={t("templates.imageAltPlaceholder")}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImageOpen(false)} disabled={imageBusy}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={() => void insertImage()}
+              disabled={imageBusy || (!imageFile && !imageUrl.trim())}
+            >
+              {imageBusy ? <Loader2 className="animate-spin" /> : <Upload />}
+              {imageBusy ? t("templates.uploading") : t("templates.insert")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={deleteTarget !== null}

@@ -3,6 +3,7 @@ import {
   clearMailAccount,
   getMailAccountSummary,
   markMailAccountVerified,
+  updateMailFromName,
 } from "@/lib/db/mail";
 import {
   GmailError,
@@ -41,6 +42,34 @@ export async function POST() {
       { status: 400 }
     );
   }
+}
+
+/** Updates the sender display name shown in the recipient's inbox. */
+export async function PATCH(request: Request) {
+  const account = getMailAccountSummary();
+  if (!account) {
+    return NextResponse.json({ error: "No Gmail account is connected." }, { status: 400 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { fromName?: unknown };
+  if (body.fromName !== undefined && typeof body.fromName !== "string") {
+    return NextResponse.json({ error: "Invalid sender name." }, { status: 400 });
+  }
+
+  const name =
+    typeof body.fromName === "string"
+      ? body.fromName.replace(/[\r\n\t]+/g, " ").trim()
+      : "";
+
+  if (name.length > 80) {
+    return NextResponse.json(
+      { error: "The sender name must be 80 characters or fewer." },
+      { status: 400 }
+    );
+  }
+
+  updateMailFromName(name || null);
+  return NextResponse.json({ account: getMailAccountSummary() });
 }
 
 /** Disconnects locally and revokes the grant at Google. */
